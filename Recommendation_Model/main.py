@@ -5,12 +5,59 @@ def main():
     print("Welcome to the Library Recommendation System")
     print("------------------------------------------")
     
-    # Use the enhanced data by default if available
-    data_path = 'enhanced_library_data.csv'
-    # Fallback check could be added, but for now we assume it exists as we just created it.
+    import argparse
+    import os
     
+    # Construct absolute path to the data file
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(base_dir, 'enhanced_library_data.csv')
+    
+    # Check if data file exists
+    if not os.path.exists(data_path):
+        # Fallback for when running from different directories if needed, though abspath should handle it
+        print(f"Warning: Data file not found at {data_path}")
+
     rec = LibraryRecommender(data_path)
     
+    # Setup Argument Parser
+    parser = argparse.ArgumentParser(description="Library Recommendation System")
+    parser.add_argument("--dept", help="Get top 50 books for a specific department")
+    parser.add_argument("--title", help="Get recommendations for a specific book title")
+    
+    args = parser.parse_args()
+
+    # Pre-check data existence before loading heavy models if possible, 
+    # but load_and_preprocess is needed for both modes.
+    
+    if args.dept or args.title:
+        # CLI Mode
+        try:
+            # Suppress normal prints if desired, or keep them for logs
+            rec.load_and_preprocess()
+            
+            if args.dept:
+                print(f"--- Top 50 Books in {args.dept} ---")
+                top_books = rec.get_top_50_by_dept(args.dept)
+                if not top_books.empty:
+                    print(top_books[['Title', 'Author', 'Copies', 'Rating']].to_string(index=False))
+                else:
+                    print("No books found for this department.")
+            
+            if args.title:
+                print(f"--- Recommendations for '{args.title}' ---")
+                # We need the model prepared for recommendations
+                rec.prepare_recommendation_model()
+                results = rec.recommend_books(args.title)
+                if isinstance(results, list) and not results:
+                    print("Book not found or no recommendations.")
+                else:
+                    print(results.to_string(index=False))
+                    
+        except Exception as e:
+            print(f"Error: {e}")
+        return
+
+    # Interactive Mode (Default)
     print("\nPlease wait, loading data and analyzing titles...")
     try:
         rec.load_and_preprocess()

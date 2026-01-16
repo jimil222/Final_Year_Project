@@ -1,17 +1,37 @@
 import os
-from app.ml.recommender_system import LibraryRecommender
+import sys
 
-# Global instance
+# Add project root
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from Recommendation_Model.recommender_system import LibraryRecommender
+
+# Singleton instance
 _recommender = None
 
 def get_recommender():
     global _recommender
+
     if _recommender is None:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        data_path = os.path.join(base_dir, "data.csv")
-        _recommender = LibraryRecommender(data_path)
-        print("Loading Recommendation Model data...")
-        _recommender.load_and_preprocess()
-        # Optionally prepare model if we strongly need Feature 2 (book to book) immediately
-        # _recommender.prepare_recommendation_model() 
+        data_path = os.path.join(
+            project_root,
+            "Recommendation_Model",
+            "enhanced_library_data.csv"
+        )
+
+        if not os.path.exists(data_path):
+            raise FileNotFoundError(f"❌ Data file not found: {data_path}")
+
+        print("🔄 Initializing LibraryRecommender (Top-50 only)...")
+
+        rec = LibraryRecommender(data_path)
+        rec.load_and_preprocess()   # ✅ REQUIRED
+
+        # ❌ DO NOT prepare TF-IDF yet
+        _recommender = rec
+
+        print("✅ Recommender ready for Top-50")
+
     return _recommender
