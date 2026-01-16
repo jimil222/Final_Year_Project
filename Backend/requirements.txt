@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+prisma
+python-dotenv
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+email-validator
+pandas
+scikit-learn
+numpy
+

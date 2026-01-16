@@ -1,4 +1,4 @@
-from recommender_system import LibraryRecommender
+from Recommendation_Model.recommender_system import LibraryRecommender
 
 def test_recommender():
     print("Initializing Recommender...")
