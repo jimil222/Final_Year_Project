@@ -10,52 +10,46 @@ class LibraryRecommender:
         self.tfidf_matrix = None
         self.cosine_sim = None
         self.indices = None
+        self.lower_indices = None
         self.unique_books = None
 
-    def save_enhanced_data(self, output_path):
-        if self.df is not None:
-            self.df.to_csv(output_path, index=False)
-            print(f"Saved enhanced data to {output_path}")
-
+    # ===============================
+    # Load & Preprocess Data
+    # ===============================
     def load_and_preprocess(self):
-        try:
-            print(f"Loading data from {self.data_path}...")
-            self.df = pd.read_csv(self.data_path)
+        print(f"Loading data from {self.data_path}...")
+        self.df = pd.read_csv(self.data_path)
 
-            # Clean columns
-            self.df.columns = self.df.columns.str.strip()
-            self.df = self.df.dropna(subset=['Title'])
+        self.df.columns = self.df.columns.str.strip()
+        self.df = self.df.dropna(subset=['Title'])
 
-            self.df['Title'] = self.df['Title'].astype(str).str.strip()
-            self.df['Author'] = self.df['Author'].astype(str).str.strip()
-            self.df['Copies'] = pd.to_numeric(
-                self.df['Copies'], errors='coerce'
-            ).fillna(0).astype(int)
+        self.df['Title'] = self.df['Title'].astype(str).str.strip()
+        self.df['Author'] = self.df['Author'].astype(str).str.strip()
 
-            # 🚫 NO KEYWORD INFERENCE
-            # Use Department ONLY if it already exists
-            if 'Department' not in self.df.columns:
-                print("Department column missing. Assigning 'General'")
-                self.df['Department'] = 'General'
-            else:
-                self.df['Department'] = self.df['Department'].fillna('General')
+        # Copies kept for reference only
+        self.df['Copies'] = pd.to_numeric(
+            self.df.get('Copies', 0),
+            errors='coerce'
+        ).fillna(0).astype(int)
 
-            # Rating must exist
-            if 'Rating' not in self.df.columns:
-                print("Rating column missing. Assigning default rating 3.5")
-                self.df['Rating'] = 3.5
-            else:
-                self.df['Rating'] = self.df['Rating'].fillna(3.5)
+        if 'Department' not in self.df.columns:
+            self.df['Department'] = 'General'
+        else:
+            self.df['Department'] = self.df['Department'].fillna('General')
 
-            print("Data loaded successfully.")
-            return self.df
+        if 'Rating' not in self.df.columns:
+            self.df['Rating'] = 3.5
+        else:
+            self.df['Rating'] = self.df['Rating'].fillna(3.5)
 
-        except Exception as e:
-            print(f"Error loading data: {e}")
-            raise
+        print("Data loaded successfully.")
+        return self.df
 
-    # ✅ TOP-50 PURELY BY DEPARTMENT + RATING
-    def get_top_50_by_dept(self, dept_name):
+    # ===============================
+    # POPULARITY-BASED (RATING ONLY)
+    # + DETERMINISTIC RANDOM 10
+    # ===============================
+    def get_top_50_by_dept(self, dept_name, sample_n=9):
         if self.df is None:
             raise ValueError("Data not loaded.")
 
@@ -66,38 +60,72 @@ class LibraryRecommender:
 
         top_50 = (
             dept_books
-            .groupby(['Title', 'Author'], as_index=False)
+            .groupby(['Title', 'Author', 'Department'], as_index=False)
             .agg({'Rating': 'mean'})
             .sort_values(by='Rating', ascending=False)
             .head(50)
         )
 
+        # 🔒 Stable random selection
+        if len(top_50) > sample_n:
+            return top_50.sample(
+                n=sample_n,
+                random_state=42  # SAME RESULT EVERY TIME
+            )
+
         return top_50
 
-    # ML PART (unchanged)
+    # ===============================
+    # CONTENT-BASED MODEL
+    # ===============================
     def prepare_recommendation_model(self):
         if self.df is None:
             raise ValueError("Data not loaded.")
 
+        self.unique_books = (
+            self.df
+            .drop_duplicates(subset=['Title'])
+            .reset_index(drop=True)
+        )
+
+        self.unique_books['content'] = (
+            self.unique_books['Title'] + " " +
+            self.unique_books['Author'] + " " +
+            self.unique_books['Department']
+        )
+
         tfidf = TfidfVectorizer(stop_words='english')
-        self.unique_books = self.df.drop_duplicates(subset=['Title']).reset_index(drop=True)
-        self.tfidf_matrix = tfidf.fit_transform(self.unique_books['Title'])
+        self.tfidf_matrix = tfidf.fit_transform(self.unique_books['content'])
         self.cosine_sim = linear_kernel(self.tfidf_matrix, self.tfidf_matrix)
+
         self.indices = pd.Series(
             self.unique_books.index,
             index=self.unique_books['Title']
         ).drop_duplicates()
 
-        print("Recommendation model trained.")
+        self.lower_indices = pd.Series(
+            self.unique_books.index,
+            index=self.unique_books['Title'].str.lower()
+        ).drop_duplicates()
 
-    def recommend_books(self, title, top_n=5):
+        print("Content-based recommendation model trained.")
+
+    # ===============================
+    # CONTENT-BASED RECOMMENDATION
+    # ===============================
+    def recommend_books(self, title, top_n=4):
         if self.cosine_sim is None:
             self.prepare_recommendation_model()
 
-        if title not in self.indices:
+        idx = None
+        if title in self.indices:
+            idx = self.indices[title]
+        elif title.lower() in self.lower_indices:
+            idx = self.lower_indices[title.lower()]
+
+        if idx is None:
             return pd.DataFrame()
 
-        idx = self.indices[title]
         sim_scores = list(enumerate(self.cosine_sim[idx]))
         sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)[1:top_n+1]
         book_indices = [i[0] for i in sim_scores]
@@ -109,9 +137,15 @@ class LibraryRecommender:
         )
 
 
+# ===============================
+# MAIN EXECUTION
+# ===============================
 if __name__ == "__main__":
-    rec = LibraryRecommender("EG ACC REOPRT 2.csv")
-    rec.load_and_preprocess()
+    recommender = LibraryRecommender("EG ACC REOPRT 2.csv")
+    recommender.load_and_preprocess()
 
-    print("\n--- Top 50 Computer Science Books ---")
-    print(rec.get_top_50_by_dept("Computer Science").head())
+    print("\n--- Random 10 Books from Top 50 (Stable) ---")
+    print(recommender.get_top_50_by_dept("Computer Science"))
+
+    print("\n--- Content-Based Recommendations ---")
+    print(recommender.recommend_books("Introduction to Algorithms"))

@@ -54,7 +54,7 @@ async def get_recommendations(current_user=Depends(get_current_user)):
                 "book_id": f"CSV-{idx}",
                 "title": row["Title"],
                 "author": row["Author"],
-                "department": target_dept,
+                "department": row["Department"],
                 "status": "available",
                 "rating": float(row.get("Rating", 4.0))
             })
@@ -67,6 +67,47 @@ async def get_recommendations(current_user=Depends(get_current_user)):
         import traceback
         traceback.print_exc()
         return {"books": [], "error": str(e)}
+
+
+@router.get("/recommend-similar")
+async def recommend_similar_books(title: str, current_user=Depends(get_current_user)):
+    """
+    Get recommendations similar to a specific book title.
+    Strictly uses content-based similarity. Returns empty if not found.
+    """
+    print(f"Fetching similar books for title: '{title}'")
+    
+    if not title:
+         return {"books": []}
+
+    try:
+        from app.ml.service import get_recommender
+        rec = get_recommender()
+        
+        # This will internally train TF-IDF if needed
+        similar_df = rec.recommend_books(title, top_n=4)
+        
+        books_list = []
+        
+        if not similar_df.empty:
+            for idx, row in similar_df.iterrows():
+                books_list.append({
+                    "id": idx + 2000, # Mock ID
+                    "book_id": f"REC-{idx}",
+                    "title": row['Title'],
+                    "author": row['Author'],
+                    "department": row['Department'],
+                    "status": "available", 
+                    "rating": float(row.get('Rating', 4.0))
+                })
+        
+        print(f"Found {len(books_list)} books (Content-Based).")
+        return {"books": books_list}
+
+    except Exception as e:
+        print(f"Error in recommend-similar: {e}")
+        return {"books": [], "error": str(e)}
+
 
 
 @router.get("/me")

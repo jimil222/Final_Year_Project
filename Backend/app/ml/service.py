@@ -29,9 +29,12 @@ def get_recommender():
         rec = LibraryRecommender(data_path)
         rec.load_and_preprocess()   # ✅ REQUIRED
 
-        # ❌ DO NOT prepare TF-IDF yet
+        # ✅ PREPARE TF-IDF for similar books recommendation
+        print("🧠 Training Recommendation Model (TF-IDF)...")
+        rec.prepare_recommendation_model()
+
         _recommender = rec
 
-        print("✅ Recommender ready for Top-50")
+        print("✅ Recommender ready for Top-50 AND Similar Books")
 
     return _recommender

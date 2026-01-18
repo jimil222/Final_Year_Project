@@ -39,7 +39,7 @@ def main():
                 print(f"--- Top 50 Books in {args.dept} ---")
                 top_books = rec.get_top_50_by_dept(args.dept)
                 if not top_books.empty:
-                    print(top_books[['Title', 'Author', 'Copies', 'Rating']].to_string(index=False))
+                    print(top_books[['Title', 'Author', 'Rating']].to_string(index=False))
                 else:
                     print("No books found for this department.")
             
@@ -96,7 +96,7 @@ def main():
             
             if not top_books.empty:
                 # Print nicely
-                print(top_books[['Title', 'Author', 'Copies', 'Rating']].to_string(index=False))
+                print(top_books[['Title', 'Author', 'Rating']].to_string(index=False))
             else:
                 print("No books found for this department or department name incorrect.")
                 
