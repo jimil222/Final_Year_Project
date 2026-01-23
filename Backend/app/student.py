@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_current_student
 
 router = APIRouter(prefix="/student", tags=["Student"])
 
 
 @router.get("/recommendations")
-async def get_recommendations(current_user=Depends(get_current_user)):
+async def get_recommendations(current_user=Depends(get_current_student)):
     user_dept = current_user.department
     print(f"User Department: {user_dept}")
 
@@ -70,7 +70,7 @@ async def get_recommendations(current_user=Depends(get_current_user)):
 
 
 @router.get("/recommend-similar")
-async def recommend_similar_books(title: str, current_user=Depends(get_current_user)):
+async def recommend_similar_books(title: str, current_user=Depends(get_current_student)):
     """
     Get recommendations similar to a specific book title.
     Strictly uses content-based similarity. Returns empty if not found.
@@ -112,11 +112,16 @@ async def recommend_similar_books(title: str, current_user=Depends(get_current_u
 
 @router.get("/me")
 async def read_users_me(current_user=Depends(get_current_user)):
+    # Handle both User (student) and Admin
+    department = getattr(current_user, "department", None)
+    role = "student" if hasattr(current_user, "department") else "admin"
+    
     return {
         "user_id": str(current_user.user_id),
         "name": current_user.name,
         "email": current_user.email,
         "roll_no": current_user.roll_no,
-        "department": current_user.department,
+        "department": department,
+        "role": role,
         "created_at": current_user.created_at
     }

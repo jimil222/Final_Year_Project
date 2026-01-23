@@ -19,13 +19,42 @@ model User {
   @@map("users")
 }
 
+model Shelf {
+  shelf_id     BigInt @id @default(autoincrement())
+  shelf_number String @unique @db.VarChar(50)
+  coordinate_x Int
+  coordinate_y Int
+  books        Book[]
+
+  @@map("shelves")
+}
+
 model Book {
-  book_id     Int      @id @default(autoincrement())
-  book_name   String   @db.VarChar(200)
-  author      String   @db.VarChar(100)
-  department  String?  @db.VarChar(100)
-  status      String   @default("available")
-  created_at  DateTime @default(now())
+  book_id      BigInt     @id @default(autoincrement())
+  book_name    String     @db.VarChar(255)
+  author       String?    @db.VarChar(255)
+  nfc_tag_id   String     @unique @db.VarChar(100)
+  shelf_number String     @db.VarChar(50)
+  status       BookStatus @default(AVAILABLE)
+
+  shelf        Shelf      @relation(fields: [shelf_number], references: [shelf_number])
 
   @@map("books")
+}
+
+enum BookStatus {
+  AVAILABLE
+  BORROWED
+  MAINTENANCE
+}
+
+model Admin {
+  user_id    BigInt   @id @default(autoincrement())
+  roll_no    String   @unique @db.VarChar(50)
+  name       String   @db.VarChar(100)
+  email      String   @unique @db.VarChar(150)
+  password   String   @db.VarChar(255)
+  created_at DateTime @default(now())
+
+  @@map("admin")
 }
