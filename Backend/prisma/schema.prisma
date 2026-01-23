@@ -1,3 +1,6 @@
+// ==============================
+// DATASOURCE & CLIENT
+// ==============================
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
@@ -7,54 +10,147 @@ generator client {
   provider = "prisma-client-py"
 }
 
+// ==============================
+// USER (STUDENTS)
+// ==============================
 model User {
-  user_id    BigInt  @id @default(autoincrement())
-  roll_no    String  @unique @db.VarChar(50)
-  name       String  @db.VarChar(100)
+  user_id    BigInt   @id @default(autoincrement())
+  roll_no    String   @unique @db.VarChar(50)
+  name       String   @db.VarChar(100)
   email      String   @unique @db.VarChar(150)
   password   String   @db.VarChar(255)
   department String?  @db.VarChar(100)
+
+  allocations  UserBookAllocation[]
+  transactions Transaction[]
+
   created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@map("users")
 }
 
+// ==============================
+// ADMIN (LIBRARY STAFF)
+// ==============================
+model Admin {
+  admin_id BigInt @id @default(autoincrement())
+  name     String @db.VarChar(100)
+  email    String @unique @db.VarChar(150)
+  password String @db.VarChar(255)
+
+  allocations  UserBookAllocation[]
+  transactions Transaction[]
+
+  created_at DateTime @default(now())
+
+  @@map("admins")
+}
+
+// ==============================
+// SHELVES (ROBOT COORDINATES)
+// ==============================
 model Shelf {
   shelf_id     BigInt @id @default(autoincrement())
   shelf_number String @unique @db.VarChar(50)
   coordinate_x Int
   coordinate_y Int
-  books        Book[]
+
+  books Book[]
 
   @@map("shelves")
 }
 
+// ==============================
+// BOOKS (PHYSICAL COPIES)
+// ==============================
 model Book {
-  book_id      BigInt     @id @default(autoincrement())
-  book_name    String     @db.VarChar(255)
-  author       String?    @db.VarChar(255)
-  nfc_tag_id   String     @unique @db.VarChar(100)
-  shelf_number String     @db.VarChar(50)
-  status       BookStatus @default(AVAILABLE)
+  book_id    BigInt @id @default(autoincrement())
+  book_name  String @db.VarChar(255)
+  author     String? @db.VarChar(255)
+  nfc_tag_id String @unique @db.VarChar(100)
 
-  shelf        Shelf      @relation(fields: [shelf_number], references: [shelf_number])
+  shelf_id BigInt
+  status   BookStatus @default(AVAILABLE)
+
+  shelf        Shelf @relation(fields: [shelf_id], references: [shelf_id])
+  allocations  UserBookAllocation[]
+  transactions Transaction[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@map("books")
 }
 
 enum BookStatus {
   AVAILABLE
+  RESERVED
   BORROWED
   MAINTENANCE
 }
 
-model Admin {
-  user_id    BigInt   @id @default(autoincrement())
-  roll_no    String   @unique @db.VarChar(50)
-  name       String   @db.VarChar(100)
-  email      String   @unique @db.VarChar(150)
-  password   String   @db.VarChar(255)
+// ==============================
+// USER BOOK ALLOCATIONS
+// (CURRENT OWNERSHIP STATE)
+// ==============================
+model UserBookAllocation {
+  allocation_id BigInt @id @default(autoincrement())
+
+  user_id  BigInt
+  book_id  BigInt
+  admin_id BigInt
+
+  status AllocationStatus
+
+  reserved_at DateTime?
+  borrowed_at DateTime?
+  returned_at DateTime?
+
+  user  User  @relation(fields: [user_id], references: [user_id])
+  book  Book  @relation(fields: [book_id], references: [book_id])
+  admin Admin @relation(fields: [admin_id], references: [admin_id])
+
   created_at DateTime @default(now())
 
-  @@map("admin")
+  @@unique([book_id]) // one book -> one active allocation
+  @@map("user_book_allocations")
+}
+
+enum AllocationStatus {
+  PENDING   // Student has requested the book, waiting for admin approval
+  RESERVED  // Admin approved, book reserved for student
+  BORROWED  // Student borrowed the book via NFC
+  RETURNED  // Student returned the book
+}
+
+// ==============================
+// TRANSACTIONS (HISTORY / AUDIT)
+// ==============================
+model Transaction {
+  transaction_id BigInt @id @default(autoincrement())
+
+  user_id  BigInt
+  book_id  BigInt
+  admin_id BigInt
+
+  checkout_time DateTime
+  due_date      DateTime
+  return_time   DateTime?
+
+  status TransactionStatus
+
+  user  User  @relation(fields: [user_id], references: [user_id])
+  book  Book  @relation(fields: [book_id], references: [book_id])
+  admin Admin @relation(fields: [admin_id], references: [admin_id])
+
+  created_at DateTime @default(now())
+
+  @@map("transactions")
+}
+
+enum TransactionStatus {
+  BORROWED
+  RETURNED
+  OVERDUE
 }

@@ -41,21 +41,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return user
 
 def get_current_student(user = Depends(get_current_user)):
-    # Check if user is a Student (has 'department' field or check type)
-    # Admin model does not have 'department'
-    if not hasattr(user, 'department'):
+    # Check if user is a Student (has 'user_id' field)
+    # Admin model has 'admin_id'
+    if hasattr(user, 'admin_id'):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
-            detail="Student acecss required"
+            detail="Student access required"
         )
     return user
 
 def get_current_admin(user = Depends(get_current_user)):
-    # Check if user is Admin (does not have 'department' or checks type name)
-    # Note: A more robust way is checking the table name if available, 
-    # but 'department' presence is detecting the model difference here.
-    # Alternatively, we could check `user.__class__.__name__ == 'Admin'`
-    if hasattr(user, 'department'): 
+    # Check if user is Admin (has 'admin_id' field)
+    if hasattr(user, 'user_id'): 
         # It's a student
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 

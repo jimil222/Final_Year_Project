@@ -12,7 +12,7 @@ class UserRegister(BaseModel):
     name: str
     email: EmailStr
     password: str
-    roll_no: str
+    roll_no: Optional[str] = None  # Not required for admins
     department: Optional[str] = None
     role: Literal["student", "admin"] = "student"
 
@@ -27,7 +27,7 @@ class Token(BaseModel):
     user_id: int
     name: str
     email: str
-    roll_no: str
+    roll_no: Optional[str] = None  # Not present for admins
     department: Optional[str] = None
     role: str
 
@@ -45,22 +45,27 @@ async def register(user: UserRegister):
         if admin_count > 0:
             raise HTTPException(status_code=400, detail="Admin already exists")
             
-        # Check unique email/roll_no logic for admin table specifically
+        # Check unique email logic for admin table specifically
         existing_admin = await db.admin.find_unique(where={"email": user.email})
         if existing_admin:
             raise HTTPException(status_code=400, detail="Email already registered")
             
+        # Admin model doesn't have roll_no field in new schema
         new_user = await db.admin.create(
             data={
                 "name": user.name,
                 "email": user.email,
-                "roll_no": user.roll_no,
                 "password": hashed_password
             }
         )
         department = None
+        roll_no = None
         
     else:
+        # Validate roll_no is provided for students
+        if not user.roll_no:
+            raise HTTPException(status_code=400, detail="Roll number is required for students")
+            
         # Check if user already exists
         existing_user_email = await db.user.find_unique(where={"email": user.email})
         if existing_user_email:
@@ -80,6 +85,7 @@ async def register(user: UserRegister):
             }
         )
         department = new_user.department
+        roll_no = new_user.roll_no
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -93,7 +99,7 @@ async def register(user: UserRegister):
         "user_id": int(new_user.user_id),
         "name": new_user.name,
         "email": new_user.email,
-        "roll_no": new_user.roll_no,
+        "roll_no": roll_no,
         "department": department,
         "role": user.role
     }
@@ -120,21 +126,25 @@ async def login(user_credentials: UserLogin):
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Get the correct ID field based on role
+    user_id = user.admin_id if user_credentials.role == "admin" else user.user_id
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.email, "user_id": str(user.user_id), "role": user_credentials.role},
+        data={"sub": user.email, "user_id": str(user_id), "role": user_credentials.role},
         expires_delta=access_token_expires
     )
     
     department = getattr(user, "department", None)
+    roll_no = getattr(user, "roll_no", None)  # Admin doesn't have roll_no
 
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user_id": int(user.user_id),
+        "user_id": int(user_id),
         "name": user.name,
         "email": user.email,
-        "roll_no": user.roll_no,
+        "roll_no": roll_no,
         "department": department,
         "role": user_credentials.role
     }

@@ -114,13 +114,29 @@ async def recommend_similar_books(title: str, current_user=Depends(get_current_s
 async def read_users_me(current_user=Depends(get_current_user)):
     # Handle both User (student) and Admin
     department = getattr(current_user, "department", None)
-    role = "student" if hasattr(current_user, "department") else "admin"
+    roll_no = getattr(current_user, "roll_no", None)
+    
+    # Debug print
+    print(f"DEBUG: /student/me called. User: {current_user.email}, Dept: {department}")
+    
+    # Determine role and get correct ID
+    is_admin = not hasattr(current_user, "department")
+    role = "admin" if is_admin else "student"
+    
+    # Fix: Ensure we get an ID even if admin_id isn't explicitly accessed
+    # Admin model has admin_id, User model has user_id
+    if is_admin:
+        user_id = getattr(current_user, "admin_id", None)
+    else:
+        user_id = getattr(current_user, "user_id", None)
+        
+    print(f"DEBUG: Role determined: {role}, ID: {user_id}")
     
     return {
-        "user_id": str(current_user.user_id),
+        "user_id": str(user_id) if user_id else "0",
         "name": current_user.name,
         "email": current_user.email,
-        "roll_no": current_user.roll_no,
+        "roll_no": roll_no,
         "department": department,
         "role": role,
         "created_at": current_user.created_at

@@ -44,11 +44,14 @@ async def root():
     return {"message": "Hello World"}
 
 from app.student import router as student_router
+from app.books import router as books_router
+from app.allocations import router as allocations_router
 
-# ... (rest of imports)
-
+# Include all routers
 app.include_router(auth_router)
 app.include_router(student_router)
+app.include_router(books_router)
+app.include_router(allocations_router)
 
 # Remove the inline /student/me as it's now in student.py
 # @app.get("/student/me") ...
