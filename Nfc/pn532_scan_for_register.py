@@ -1,6 +1,9 @@
 """
 Use when adding a new book: run this, then tap the book's NFC tag.
 The UID is sent to POST /nfc/scan so the Add Book form (polling GET /nfc/last-scan) can fill the NFC ID field.
+
+Same tag can be scanned again after SAME_TAG_COOLDOWN_SECONDS so you can re-scan the same tag
+(e.g. to confirm or fill the field again in Add Book form).
 """
 import os
 import time
@@ -10,6 +13,8 @@ from adafruit_pn532.i2c import PN532_I2C
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 NFC_SCAN_URL = f"{BACKEND_URL}/nfc/scan"
+# Same UID can be sent again after this many seconds (allows re-scanning same tag for Add Book).
+SAME_TAG_COOLDOWN_SECONDS = float(os.environ.get("SAME_TAG_COOLDOWN_SECONDS", "3"))
 
 try:
     import requests
@@ -52,13 +57,22 @@ def main():
     if not requests:
         print("(install requests to send to backend)")
     last_uid = None
+    last_uid_time = None
     while True:
         uid = pn532.read_passive_target(timeout=0.5)
-        if uid and uid != last_uid:
+        if not uid:
+            continue
+        now = time.time()
+        is_new_scan = (
+            uid != last_uid
+            or (last_uid_time is not None and (now - last_uid_time) >= SAME_TAG_COOLDOWN_SECONDS)
+        )
+        if is_new_scan:
             uid_hex = "".join([format(b, "02X") for b in uid])
             print(f"UID: {uid_hex}")
             send_scan(uid_hex)
             last_uid = uid
+            last_uid_time = now
             time.sleep(1)
 
 

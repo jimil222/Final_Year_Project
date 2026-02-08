@@ -40,8 +40,11 @@ Requires `Libra_Automated_Library/src/data/dummyBooks.js` to exist (same repo).
 ## 4. (Optional) NFC reader
 
 - **Issue/return (always on):** `cd Nfc && python pn532_test.py`  
-- **Scan for Add Book:** `cd Nfc && python pn532_scan_for_register.py`  
+- **Scan for Add Book (tag ID only):** `cd Nfc && python pn532_scan_for_register.py`  
+- **Add Book + write book name to tag:** `cd Nfc && python pn532_scan_and_write.py` — use this when adding a new book via Admin → Add Book → “Scan NFC & Write to Tag”. The script reads the tag, receives the book name from the backend, writes it to the NTAG, verifies, and posts the result so the frontend can save the book.  
 Set `BACKEND_URL=http://your-server:8000` if backend is not on localhost.
+
+**NFC re-scan behaviour:** The same tag can be scanned again after a short cooldown (default 3s, set `SAME_TAG_COOLDOWN_SECONDS`). Return is allowed only after `MIN_RETURN_TIME_SECONDS` (default 5s) since borrow; set in Backend `.env` to change (e.g. `MIN_RETURN_TIME_SECONDS=10`).
 
 ---
 

@@ -2,9 +2,14 @@
 NFC tap handler: issue/return by book NFC only (no login).
 NFC reader is always on; when a book is tapped we decide issue vs return from allocation status.
 Also supports "scan for registration" so Add Book form can get NFC ID by scanning.
+
+Time constraint: return is allowed only after MIN_RETURN_TIME_SECONDS since borrow.
+Atomic updates (update_many with status filter) prevent duplicate issue/return on rapid scans.
 """
-from fastapi import APIRouter, HTTPException
+import os
+from fastapi import APIRouter, HTTPException, Depends
 from app.db import db
+from app.dependencies import get_current_admin
 from app.books import (
     get_book_by_nfc,
     get_active_allocation,
@@ -13,12 +18,32 @@ from app.books import (
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+import math
 
 router = APIRouter(prefix="/nfc", tags=["NFC"])
+
+# Minimum seconds after borrow before the same tag can be used to return (prevents accidental double-tap).
+MIN_RETURN_TIME_SECONDS = int(os.getenv("MIN_RETURN_TIME_SECONDS", "5"))
 
 # In-memory store for last NFC scan (for Add Book form). Cleared when consumed.
 _last_registration_scan: Optional[dict] = None
 _REGISTRATION_SCAN_MAX_AGE_SECONDS = 120
+
+# Add Book flow: pending write (book_name to write to tag) and write result (success/error).
+# Key: normalized nfc_tag_id. Value: { "book_name": str, "created_at": iso } or { "success": bool, "error": str?, "created_at": iso }.
+_pending_writes: dict = {}
+_write_results: dict = {}
+_PENDING_WRITE_MAX_AGE_SECONDS = 60
+_WRITE_RESULT_MAX_AGE_SECONDS = 120
+
+
+def _update_many_count(result) -> int:
+    """Prisma update_many may return BatchQueryResult with .count or an int."""
+    if result is None:
+        return 0
+    if isinstance(result, int):
+        return result
+    return getattr(result, "count", 0)
 
 
 def _normalize_uid(uid: str) -> str:
@@ -36,6 +61,98 @@ def _store_registration_scan(nfc_tag_id: str) -> None:
 class NFCTapRequest(BaseModel):
     """Payload from NFC reader (UID = book's nfc_tag_id)."""
     nfc_tag_id: str
+
+
+class SetPendingWriteRequest(BaseModel):
+    """Admin sets pending write: book name to write to this tag after scan."""
+    nfc_tag_id: str
+    book_name: str
+
+
+class WriteResultRequest(BaseModel):
+    """NFC reader posts result of writing book name to tag."""
+    nfc_tag_id: str
+    success: bool
+    error: Optional[str] = None
+
+
+@router.post("/set-pending-write")
+async def set_pending_write(body: SetPendingWriteRequest, current_admin=Depends(get_current_admin)):
+    """
+    Admin sets a pending write for Add Book flow. After the reader scans a tag and gets this
+    book_name, it will write it to the tag and POST to /nfc/write-result.
+    """
+    uid = _normalize_uid(body.nfc_tag_id)
+    if not uid:
+        raise HTTPException(status_code=400, detail="nfc_tag_id is required")
+    if not (body.book_name or "").strip():
+        raise HTTPException(status_code=400, detail="book_name is required")
+    book_name = body.book_name.strip()[:255]
+    _pending_writes[uid] = {
+        "book_name": book_name,
+        "created_at": datetime.now().isoformat(),
+    }
+    return {"message": "Pending write set", "nfc_tag_id": uid, "book_name": book_name}
+
+
+@router.get("/pending-write")
+async def get_pending_write(nfc_tag_id: str):
+    """
+    NFC reader polls this after scanning a tag. Returns book_name to write to the tag, or 404.
+    Consumes the pending write so it is only used once.
+    """
+    uid = _normalize_uid(nfc_tag_id)
+    if not uid or uid not in _pending_writes:
+        raise HTTPException(status_code=404, detail="No pending write for this tag")
+    entry = _pending_writes.pop(uid)
+    try:
+        t = datetime.fromisoformat(entry["created_at"].replace("Z", "+00:00"))
+        t_naive = t.replace(tzinfo=None) if t.tzinfo else t
+        if (datetime.now() - t_naive).total_seconds() > _PENDING_WRITE_MAX_AGE_SECONDS:
+            raise HTTPException(status_code=404, detail="Pending write expired")
+    except Exception:
+        pass
+    return {"nfc_tag_id": uid, "book_name": entry["book_name"]}
+
+
+@router.post("/write-result")
+async def post_write_result(body: WriteResultRequest):
+    """
+    NFC reader posts the result of writing book name to the tag. Frontend polls GET /nfc/write-result.
+    """
+    uid = _normalize_uid(body.nfc_tag_id)
+    if not uid:
+        raise HTTPException(status_code=400, detail="nfc_tag_id is required")
+    _write_results[uid] = {
+        "success": body.success,
+        "error": body.error,
+        "created_at": datetime.now().isoformat(),
+    }
+    return {"message": "Write result stored", "nfc_tag_id": uid}
+
+
+@router.get("/write-result")
+async def get_write_result(nfc_tag_id: str):
+    """
+    Frontend polls this after setting pending write. Returns and consumes the result.
+    """
+    uid = _normalize_uid(nfc_tag_id)
+    if not uid or uid not in _write_results:
+        return {"nfc_tag_id": uid, "ready": False, "success": None, "error": None}
+    entry = _write_results.pop(uid)
+    try:
+        t = datetime.fromisoformat(entry["created_at"].replace("Z", "+00:00"))
+        t_naive = t.replace(tzinfo=None) if t.tzinfo else t
+        if (datetime.now() - t_naive).total_seconds() > _WRITE_RESULT_MAX_AGE_SECONDS:
+            return {"nfc_tag_id": uid, "ready": False, "success": None, "error": None}
+    except Exception:
+        pass
+    return {
+        "nfc_tag_id": uid,
+        "ready": True,
+        "success": entry["success"],
+        "error": entry.get("error"),
+    }
 
 
 @router.post("/scan")
@@ -111,18 +228,26 @@ async def nfc_tap(request: NFCTapRequest):
             detail="No active reservation or borrow for this book. Request and get it approved first, or the book is already returned.",
         )
 
-    # ----- Issue: RESERVED → BORROWED -----
+    # ----- Issue: RESERVED → BORROWED (atomic to prevent duplicate on rapid scan) -----
     if allocation.status == "RESERVED":
         checkout_time = datetime.now()
         due_date = calculate_due_date(checkout_time)
 
-        await db.userbookallocation.update(
-            where={"allocation_id": allocation.allocation_id},
+        result = await db.userbookallocation.update_many(
+            where={
+                "allocation_id": allocation.allocation_id,
+                "status": "RESERVED",
+            },
             data={
                 "status": "BORROWED",
                 "borrowed_at": checkout_time,
             },
         )
+        if _update_many_count(result) == 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Book already issued or request was updated. Please do not scan again.",
+            )
         await db.book.update(
             where={"book_id": book.book_id},
             data={"status": "BORROWED"},
@@ -146,17 +271,35 @@ async def nfc_tap(request: NFCTapRequest):
             "due_date": due_date.isoformat(),
         }
 
-    # ----- Return: BORROWED → AVAILABLE -----
+    # ----- Return: BORROWED → AVAILABLE (time constraint + atomic to prevent duplicate) -----
     if allocation.status == "BORROWED":
         return_time = datetime.now()
+        borrowed_at = allocation.borrowed_at
+        if not borrowed_at:
+            borrowed_at = allocation.created_at
+        elapsed_seconds = (return_time - borrowed_at).total_seconds()
+        if elapsed_seconds < MIN_RETURN_TIME_SECONDS:
+            wait_seconds = math.ceil(MIN_RETURN_TIME_SECONDS - elapsed_seconds)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Please wait {wait_seconds} second(s) before returning this book (prevents accidental double-tap).",
+            )
 
-        await db.userbookallocation.update(
-            where={"allocation_id": allocation.allocation_id},
+        result = await db.userbookallocation.update_many(
+            where={
+                "allocation_id": allocation.allocation_id,
+                "status": "BORROWED",
+            },
             data={
                 "status": "RETURNED",
                 "returned_at": return_time,
             },
         )
+        if _update_many_count(result) == 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Book already returned. Please do not scan again.",
+            )
         await db.book.update(
             where={"book_id": book.book_id},
             data={"status": "AVAILABLE"},

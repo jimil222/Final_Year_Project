@@ -1,0 +1,30 @@
+1. Returned , Borrowed should be updated immediately (state issue) 
+2. Same nfc should be able to scanned again , Time constraints after borrow book for return
+3. Multiple sessions for multiple users
+4. Autoshelf allocations
+5. Flow : Add Book-> popup for nfc scan -> nfc scan(id and the name) -> write the book name in the tag -> read tag id -> store book in db.
+6. Returned book should be reassigned.
+7. Session management no logout on reload
+8. Remove the issue / return page and robot status page.
+9. Site optimization , Refactoring the code , db opt
+10. Additional features.
+
+# Same nfc should be able to scanned again
+
+Fix NFC re-scan issue:
+
+Currently, after borrowing a book using an NFC tag, the same NFC tag cannot be scanned again immediately to return the book.
+
+I want the SAME NFC tag to be scannable again, but only after a time constraint.
+
+Requirements:
+- Store borrowTimestamp when a book is borrowed.
+- On every NFC scan, check the tag state (available / borrowed).
+- If state is "borrowed":
+    - Allow return ONLY if (currentTime - borrowTimestamp) >= MIN_RETURN_TIME (e.g. 5–10 seconds).
+    - Otherwise, block the action and show a proper message.
+- Prevent duplicate borrow/return on rapid multiple scans.
+- Logic must be handled on the backend, not only frontend.
+- Ensure this works correctly with multiple users scanning concurrently.
+
+Provide clean backend logic and code changes to implement this.

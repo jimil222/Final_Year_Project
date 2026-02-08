@@ -1,3 +1,5 @@
+import os
+import math
 from fastapi import APIRouter, HTTPException, Depends, status
 from app.db import db
 from app.dependencies import get_current_student, get_current_admin, get_current_user
@@ -6,6 +8,18 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/books", tags=["Books"])
+
+# Minimum seconds after borrow before return is allowed (prevents accidental double-tap).
+MIN_RETURN_TIME_SECONDS = int(os.getenv("MIN_RETURN_TIME_SECONDS", "5"))
+
+
+def _update_many_count(result) -> int:
+    """Prisma update_many may return BatchQueryResult with .count or an int."""
+    if result is None:
+        return 0
+    if isinstance(result, int):
+        return result
+    return getattr(result, "count", 0)
 
 # ==================== Request/Response Models ====================
 
@@ -93,6 +107,9 @@ async def list_shelves(current_user=Depends(get_current_user)):
 @router.post("/", response_model=BookResponse)
 async def create_book(body: CreateBookRequest, current_admin=Depends(get_current_admin)):
     """Admin adds a new book. Use NFC scan (GET /nfc/last-scan) to get nfc_tag_id."""
+    book_name = (body.book_name or "").strip()
+    if not book_name:
+        raise HTTPException(status_code=400, detail="book_name is required")
     uid = body.nfc_tag_id.strip().upper().replace(" ", "")
     if not uid:
         raise HTTPException(status_code=400, detail="nfc_tag_id is required (scan the book's NFC tag)")
@@ -104,8 +121,8 @@ async def create_book(body: CreateBookRequest, current_admin=Depends(get_current
         raise HTTPException(status_code=400, detail="Invalid shelf_id")
     book = await db.book.create(
         data={
-            "book_name": body.book_name,
-            "author": body.author,
+            "book_name": book_name,
+            "author": (body.author or "").strip() or None,
             "nfc_tag_id": uid,
             "shelf_id": body.shelf_id,
             "status": "AVAILABLE",
@@ -281,22 +298,29 @@ async def borrow_book(request: NFCRequest, current_user=Depends(get_current_stud
             detail="This book is reserved by another user"
         )
     
-    # Update allocation to BORROWED
+    # Atomic update: only one request can move RESERVED → BORROWED (prevents duplicate on rapid scan).
     checkout_time = datetime.now()
     due_date = calculate_due_date(checkout_time)
-    
-    updated_allocation = await db.userbookallocation.update(
-        where={"allocation_id": allocation.allocation_id},
+
+    result = await db.userbookallocation.update_many(
+        where={
+            "allocation_id": allocation.allocation_id,
+            "status": "RESERVED",
+        },
         data={
             "status": "BORROWED",
-            "borrowed_at": checkout_time
-        }
+            "borrowed_at": checkout_time,
+        },
     )
-    
-    # Update book status
+    if _update_many_count(result) == 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Book already issued or request was updated. Please do not scan again.",
+        )
+
     await db.book.update(
         where={"book_id": book.book_id},
-        data={"status": "BORROWED"}
+        data={"status": "BORROWED"},
     )
     
     # Create transaction record
@@ -342,52 +366,64 @@ async def return_book(request: NFCRequest, current_user=Depends(get_current_stud
             status_code=403,
             detail="This book is borrowed by another user"
         )
-    
+
+    # Allow return only after MIN_RETURN_TIME_SECONDS since borrow (prevents accidental double-tap).
     return_time = datetime.now()
-    
-    # Update allocation to RETURNED
-    await db.userbookallocation.update(
-        where={"allocation_id": allocation.allocation_id},
+    borrowed_at = allocation.borrowed_at or allocation.created_at
+    elapsed_seconds = (return_time - borrowed_at).total_seconds()
+    if elapsed_seconds < MIN_RETURN_TIME_SECONDS:
+        wait_seconds = math.ceil(MIN_RETURN_TIME_SECONDS - elapsed_seconds)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Please wait {wait_seconds} second(s) before returning this book (prevents accidental double-tap).",
+        )
+
+    # Atomic update: only one request can move BORROWED → RETURNED (prevents duplicate on rapid scan).
+    result = await db.userbookallocation.update_many(
+        where={
+            "allocation_id": allocation.allocation_id,
+            "status": "BORROWED",
+        },
         data={
             "status": "RETURNED",
-            "returned_at": return_time
-        }
+            "returned_at": return_time,
+        },
     )
-    
-    # Update book status to AVAILABLE
+    if _update_many_count(result) == 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Book already returned. Please do not scan again.",
+        )
+
     await db.book.update(
         where={"book_id": book.book_id},
-        data={"status": "AVAILABLE"}
+        data={"status": "AVAILABLE"},
     )
-    
-    # Update the most recent transaction
+
     transaction = await db.transaction.find_first(
         where={
             "book_id": book.book_id,
             "user_id": current_user.user_id,
-            "return_time": None
+            "return_time": None,
         },
-        order={"checkout_time": "desc"}
+        order={"checkout_time": "desc"},
     )
-    
+    was_overdue = False
     if transaction:
-        # Check if overdue
-        is_overdue = return_time > transaction.due_date
-        status = "OVERDUE" if is_overdue else "RETURNED"
-        
+        was_overdue = return_time > transaction.due_date
         await db.transaction.update(
             where={"transaction_id": transaction.transaction_id},
             data={
                 "return_time": return_time,
-                "status": status
-            }
+                "status": "OVERDUE" if was_overdue else "RETURNED",
+            },
         )
-    
+
     return {
         "message": "Book returned successfully",
         "book_name": book.book_name,
         "return_time": return_time,
-        "was_overdue": is_overdue if transaction else False
+        "was_overdue": was_overdue,
     }
 
 @router.post("/{book_id}/approve-request", response_model=dict)
