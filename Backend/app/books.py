@@ -83,7 +83,7 @@ async def get_book_by_nfc(nfc_tag_id: str):
     return book
 
 async def get_active_allocation(book_id: int):
-    """Get active allocation for a book (PENDING, RESERVED or BORROWED)"""
+    """Get active allocation for a book (PENDING, RESERVED or BORROWED). RETURNED rows are ignored."""
     return await db.userbookallocation.find_first(
         where={
             "book_id": book_id,
@@ -91,6 +91,15 @@ async def get_active_allocation(book_id: int):
         },
         include={"user": True, "admin": True}
     )
+
+
+async def get_returned_allocation_for_book(book_id: int):
+    """Get the RETURNED allocation row for a book (for reuse on new request). One book has at most one allocation row (unique book_id)."""
+    return await db.userbookallocation.find_first(
+        where={"book_id": book_id, "status": "RETURNED"},
+        order={"returned_at": "desc"},
+    )
+
 
 # ==================== Endpoints ====================
 
@@ -225,39 +234,56 @@ async def get_book(book_id: int, current_user=Depends(get_current_user)):
 
 @router.post("/{book_id}/request", response_model=AllocationResponse)
 async def request_book(book_id: int, current_user=Depends(get_current_student)):
-    """Student requests a book (AVAILABLE → PENDING, awaiting admin approval)"""
+    """Student requests a book. Book must be AVAILABLE. Reuses RETURNED allocation row if present (unique book_id)."""
     book = await get_book_by_id(book_id)
     
-    # Check if book is available
     if book.status != "AVAILABLE":
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Book is not available (current status: {book.status})"
         )
     
-    # Check if there's already an active allocation (PENDING, RESERVED, or BORROWED)
-    existing_allocation = await get_active_allocation(book_id)
-    if existing_allocation:
+    existing_active = await get_active_allocation(book_id)
+    if existing_active:
         raise HTTPException(
             status_code=400,
-            detail=f"Book is already {existing_allocation.status.lower()} by another user"
+            detail=f"Book is already {existing_active.status.lower()} by another user"
         )
     
-    # Get any admin (will be updated when admin approves)
     admin = await db.admin.find_first()
     if not admin:
         raise HTTPException(status_code=500, detail="No admin available")
     
-    # Create PENDING allocation (request)
-    allocation = await db.userbookallocation.create(
-        data={
-            "user_id": current_user.user_id,
-            "book_id": book_id,
-            "admin_id": admin.admin_id,
-            "status": "PENDING",
-            "reserved_at": None  # Will be set when admin approves
-        }
-    )
+    # Reuse RETURNED allocation row if present (so unique book_id is not violated). Atomic update to prevent double-assign.
+    returned_row = await get_returned_allocation_for_book(book_id)
+    if returned_row:
+        result = await db.userbookallocation.update_many(
+            where={
+                "allocation_id": returned_row.allocation_id,
+                "status": "RETURNED",  # only claim if still RETURNED (concurrent request may have taken it)
+            },
+            data={
+                "user_id": current_user.user_id,
+                "admin_id": admin.admin_id,
+                "status": "PENDING",
+                "reserved_at": None,
+                "borrowed_at": None,
+                "returned_at": None,
+            },
+        )
+        if _update_many_count(result) == 0:
+            raise HTTPException(status_code=409, detail="Book was just requested by someone else. Please refresh and try again.")
+        allocation = await db.userbookallocation.find_unique(where={"allocation_id": returned_row.allocation_id})
+    else:
+        allocation = await db.userbookallocation.create(
+            data={
+                "user_id": current_user.user_id,
+                "book_id": book_id,
+                "admin_id": admin.admin_id,
+                "status": "PENDING",
+                "reserved_at": None,
+            }
+        )
     
     # Book status stays AVAILABLE until admin approves
     # No book status update here
@@ -345,7 +371,7 @@ async def borrow_book(request: NFCRequest, current_user=Depends(get_current_stud
 
 @router.post("/return", response_model=dict)
 async def return_book(request: NFCRequest, current_user=Depends(get_current_student)):
-    """Student returns a borrowed book via NFC tap (BORROWED → AVAILABLE)"""
+    """Student returns a borrowed book via NFC tap. State: BORROWED → AVAILABLE. Book is immediately available for reassignment; allocation is set to RETURNED (borrower fields cleared from active view)."""
     book = await get_book_by_nfc(request.nfc_tag_id)
     
     # Check if book is borrowed
@@ -370,7 +396,12 @@ async def return_book(request: NFCRequest, current_user=Depends(get_current_stud
     # Allow return only after MIN_RETURN_TIME_SECONDS since borrow (prevents accidental double-tap).
     return_time = datetime.now()
     borrowed_at = allocation.borrowed_at or allocation.created_at
-    elapsed_seconds = (return_time - borrowed_at).total_seconds()
+    if borrowed_at:
+        if getattr(borrowed_at, "tzinfo", None) is not None:
+            borrowed_at = borrowed_at.replace(tzinfo=None)
+        elapsed_seconds = (return_time - borrowed_at).total_seconds()
+    else:
+        elapsed_seconds = MIN_RETURN_TIME_SECONDS
     if elapsed_seconds < MIN_RETURN_TIME_SECONDS:
         wait_seconds = math.ceil(MIN_RETURN_TIME_SECONDS - elapsed_seconds)
         raise HTTPException(

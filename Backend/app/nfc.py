@@ -274,10 +274,14 @@ async def nfc_tap(request: NFCTapRequest):
     # ----- Return: BORROWED → AVAILABLE (time constraint + atomic to prevent duplicate) -----
     if allocation.status == "BORROWED":
         return_time = datetime.now()
-        borrowed_at = allocation.borrowed_at
-        if not borrowed_at:
-            borrowed_at = allocation.created_at
-        elapsed_seconds = (return_time - borrowed_at).total_seconds()
+        borrowed_at = allocation.borrowed_at or allocation.created_at
+        if borrowed_at:
+            # Normalize to naive datetime so subtraction works (DB may return timezone-aware)
+            if getattr(borrowed_at, "tzinfo", None) is not None:
+                borrowed_at = borrowed_at.replace(tzinfo=None)
+            elapsed_seconds = (return_time - borrowed_at).total_seconds()
+        else:
+            elapsed_seconds = MIN_RETURN_TIME_SECONDS  # allow return if no timestamp
         if elapsed_seconds < MIN_RETURN_TIME_SECONDS:
             wait_seconds = math.ceil(MIN_RETURN_TIME_SECONDS - elapsed_seconds)
             raise HTTPException(
