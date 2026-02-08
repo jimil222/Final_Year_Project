@@ -1,0 +1,4 @@
+# NFC reader (PN532 over I2C) - run on device with reader (e.g. Raspberry Pi)
+adafruit-blinka
+adafruit-circuitpython-pn532
+requests

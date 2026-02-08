@@ -3,14 +3,13 @@ import re
 import json
 import uuid
 import random
+import os
 from prisma import Prisma
 
-# Raw content of dummyBooks.js (simplified for embedding or reading from file)
-# In a real scenario, we might parse the file, but here I'll embed the logic to read it or just copy the data if it's small.
-# The user said "Iterates through the dummyBooks array", implying I should read the file or use the provided data.
-# I will read the file from disk to be robust.
-
-DUMMY_BOOKS_PATH = r"C:\Users\Dell\Desktop\Recommend\Libra_Automated_Library\src\data\dummyBooks.js"
+# Path to dummyBooks.js: same repo, frontend folder (relative to Backend/)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
+DUMMY_BOOKS_PATH = os.path.join(_REPO_ROOT, "Libra_Automated_Library", "src", "data", "dummyBooks.js")
 
 def parse_dummy_books(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
@@ -78,14 +77,14 @@ async def main():
 
     print("Connected to database.")
 
-    # 1. Create Shelves
-    # We need shelves to link books to.
+    # 1. Create Shelves (shelf_number is string in schema; need coordinate_x/y)
     print("Seeding Shelves...")
-    for i in range(1, 11): # Create 10 shelves
+    for i in range(1, 11):
+        sn = str(i)
         await prisma.shelf.upsert(
-            where={"shelf_number": i},
+            where={"shelf_number": sn},
             data={
-                "create": {"shelf_number": i},
+                "create": {"shelf_number": sn, "coordinate_x": i, "coordinate_y": 0},
                 "update": {},
             }
         )
@@ -118,24 +117,15 @@ async def main():
         # Generate NFC ID
         nfc_id = f"NFC-{uuid.uuid4().hex[:8].upper()}"
         
-        # Random Shelf (1-10)
-        shelf_num = random.randint(1, 10)
-        
-        # Insert
+        # Resolve shelf_id from shelf_number (1-10)
+        shelf_num = str(random.randint(1, 10))
+        shelf = await prisma.shelf.find_unique(where={"shelf_number": shelf_num})
+        if not shelf:
+            print(f"Shelf {shelf_num} not found, skipping '{title}'")
+            continue
+        shelf_id = int(shelf.shelf_id)
+
         try:
-            # We don't have a unique key other than ID and NFC. 
-            # If we want to avoid duplicates on re-run, we might check by title?
-            # Or just create always. User said "Skips duplicates safely if script is re-run".
-            # If we don't have a unique constraint on title via schema, we can't easily "skip" unless we query first.
-            # But book_name is NOT unique in schema.
-            # So "duplicates" might mean "exact same book".
-            # Let's check via nfc_tag_id (which is unique).
-            # Taking a simpler approach: check if a book with this title exists? 
-            # Or just assume "nfc_id" generation makes them unique and just insert.
-            # "Skips duplicates safely" usually implies idempotent.
-            # Since nfc is random, every run inserts new copies.
-            # To be safe/idempotent, maybe identifying by generated NFC is impossible.
-            # Identifying by Title:
             existing = await prisma.book.find_first(where={"book_name": title})
             if existing:
                 print(f"Skipping '{title}' (already exists)")
@@ -146,7 +136,7 @@ async def main():
                     "book_name": title,
                     "author": author,
                     "nfc_tag_id": nfc_id,
-                    "shelf_number": shelf_num,
+                    "shelf_id": shelf_id,
                     "status": "AVAILABLE"
                 }
             )

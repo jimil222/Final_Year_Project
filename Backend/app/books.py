@@ -34,6 +34,20 @@ class AllocationResponse(BaseModel):
     returned_at: Optional[datetime]
     created_at: datetime
 
+
+class CreateBookRequest(BaseModel):
+    book_name: str
+    author: Optional[str] = None
+    nfc_tag_id: str
+    shelf_id: int
+
+
+class ShelfResponse(BaseModel):
+    shelf_id: int
+    shelf_number: str
+    coordinate_x: int
+    coordinate_y: int
+
 # ==================== Helper Functions ====================
 
 def calculate_due_date(checkout_time: datetime, days: int = 14) -> datetime:
@@ -65,6 +79,50 @@ async def get_active_allocation(book_id: int):
     )
 
 # ==================== Endpoints ====================
+
+@router.get("/shelves", response_model=List[ShelfResponse])
+async def list_shelves(current_user=Depends(get_current_user)):
+    """List all shelves (for Add Book dropdown)."""
+    shelves = await db.shelf.find_many(order={"shelf_id": "asc"})
+    return [
+        {"shelf_id": s.shelf_id, "shelf_number": s.shelf_number, "coordinate_x": s.coordinate_x, "coordinate_y": s.coordinate_y}
+        for s in shelves
+    ]
+
+
+@router.post("/", response_model=BookResponse)
+async def create_book(body: CreateBookRequest, current_admin=Depends(get_current_admin)):
+    """Admin adds a new book. Use NFC scan (GET /nfc/last-scan) to get nfc_tag_id."""
+    uid = body.nfc_tag_id.strip().upper().replace(" ", "")
+    if not uid:
+        raise HTTPException(status_code=400, detail="nfc_tag_id is required (scan the book's NFC tag)")
+    existing = await db.book.find_unique(where={"nfc_tag_id": uid})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"A book is already registered with this NFC tag: {uid}")
+    shelf = await db.shelf.find_unique(where={"shelf_id": body.shelf_id})
+    if not shelf:
+        raise HTTPException(status_code=400, detail="Invalid shelf_id")
+    book = await db.book.create(
+        data={
+            "book_name": body.book_name,
+            "author": body.author,
+            "nfc_tag_id": uid,
+            "shelf_id": body.shelf_id,
+            "status": "AVAILABLE",
+        }
+    )
+    return {
+        "book_id": book.book_id,
+        "book_name": book.book_name,
+        "author": book.author,
+        "nfc_tag_id": book.nfc_tag_id,
+        "shelf_id": book.shelf_id,
+        "status": book.status,
+        "allocation": None,
+        "created_at": book.created_at,
+        "updated_at": book.updated_at,
+    }
+
 
 @router.get("/", response_model=List[BookResponse])
 async def list_books(current_user=Depends(get_current_user)):

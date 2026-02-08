@@ -21,20 +21,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# CORS Configuration
+# CORS Configuration – allow frontend origins (Vite/React)
 origins = [
-    "http://localhost:5173", # Vite default
-    "http://localhost:3000", # React default
+    "http://localhost:5173",
+    "http://localhost:5173/",
+    "http://localhost:3000",
     "http://127.0.0.1:5173",
+    "http://127.0.0.1:5173/",
     "http://127.0.0.1:3000",
 ]
-
+# In development, also allow any localhost/127.0.0.1 origin (any port)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?/?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 app.include_router(auth_router)
@@ -46,12 +50,14 @@ async def root():
 from app.student import router as student_router
 from app.books import router as books_router
 from app.allocations import router as allocations_router
+from app.nfc import router as nfc_router
 
 # Include all routers
 app.include_router(auth_router)
 app.include_router(student_router)
 app.include_router(books_router)
 app.include_router(allocations_router)
+app.include_router(nfc_router)
 
 # Remove the inline /student/me as it's now in student.py
 # @app.get("/student/me") ...
