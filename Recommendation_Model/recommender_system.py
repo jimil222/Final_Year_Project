@@ -21,29 +21,31 @@ class LibraryRecommender:
         self.df = pd.read_csv(self.data_path)
 
         self.df.columns = self.df.columns.str.strip()
+
+        # 🔥 Drop rows where Title is missing
         self.df = self.df.dropna(subset=['Title'])
 
-        self.df['Title'] = self.df['Title'].astype(str).str.strip()
-        self.df['Author'] = self.df['Author'].astype(str).str.strip()
+        # 🔥 Fill ALL text columns properly
+        self.df['Title'] = self.df['Title'].fillna('').astype(str).str.strip()
+        self.df['Author'] = self.df['Author'].fillna('').astype(str).str.strip()
+        self.df['Department'] = self.df.get('Department', 'General')
+        self.df['Department'] = self.df['Department'].fillna('General').astype(str).str.strip()
 
-        # Copies kept for reference only
+        # Copies
         self.df['Copies'] = pd.to_numeric(
             self.df.get('Copies', 0),
             errors='coerce'
         ).fillna(0).astype(int)
 
-        if 'Department' not in self.df.columns:
-            self.df['Department'] = 'General'
-        else:
-            self.df['Department'] = self.df['Department'].fillna('General')
-
-        if 'Rating' not in self.df.columns:
-            self.df['Rating'] = 3.5
-        else:
-            self.df['Rating'] = self.df['Rating'].fillna(3.5)
+        # Rating
+        self.df['Rating'] = pd.to_numeric(
+            self.df.get('Rating', 3.5),
+            errors='coerce'
+        ).fillna(3.5)
 
         print("Data loaded successfully.")
         return self.df
+
 
     # ===============================
     # POPULARITY-BASED (RATING ONLY)
@@ -89,10 +91,11 @@ class LibraryRecommender:
         )
 
         self.unique_books['content'] = (
-            self.unique_books['Title'] + " " +
-            self.unique_books['Author'] + " " +
-            self.unique_books['Department']
+            self.unique_books['Title'].fillna('') + " " +
+            self.unique_books['Author'].fillna('') + " " +
+            self.unique_books['Department'].fillna('')
         )
+
 
         tfidf = TfidfVectorizer(stop_words='english')
         self.tfidf_matrix = tfidf.fit_transform(self.unique_books['content'])

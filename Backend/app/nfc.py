@@ -341,3 +341,97 @@ async def nfc_tap(request: NFCTapRequest):
         status_code=400,
         detail=f"Cannot process tap: book allocation status is {allocation.status}. Only RESERVED (issue) or BORROWED (return) are allowed.",
     )
+
+
+@router.post("/status")
+async def nfc_status(request: NFCTapRequest):
+    """
+    Read-only status for a book by NFC tag (no state changes).
+    Use this from the kiosk in STATUS mode to show current borrower and submit (due) date
+    without issuing/returning the book.
+    """
+    uid = _normalize_uid(request.nfc_tag_id)
+    if not uid:
+        raise HTTPException(status_code=400, detail="nfc_tag_id is required")
+
+    try:
+        book = await get_book_by_nfc(uid)
+    except HTTPException as e:
+        if e.status_code == 404:
+            # Reuse registration behavior so unknown tags can still be used in Add Book flow.
+            _store_registration_scan(uid)
+            raise HTTPException(
+                status_code=404,
+                detail="Book not found for this NFC tag. Register the book with this tag in the system.",
+            )
+        raise
+
+    allocation = await get_active_allocation(book.book_id)
+
+    # No active allocation: book is not currently reserved or borrowed.
+    if not allocation:
+        return {
+            "action": "status",
+            "message": "Book is not currently reserved or borrowed.",
+            "book_name": book.book_name,
+            "student_name": None,
+            "book_status": book.status,
+            "allocation_status": None,
+            "due_date": None,
+        }
+
+    # Borrowed: show current borrower and due date.
+    if allocation.status == "BORROWED":
+        transaction = await db.transaction.find_first(
+            where={
+                "book_id": book.book_id,
+                "user_id": allocation.user_id,
+                "return_time": None,
+            },
+            order={"checkout_time": "desc"},
+        )
+        due_date = None
+        if transaction and transaction.due_date:
+            due_date = transaction.due_date.isoformat()
+        else:
+            # Fallback: approximate due date from allocation timestamps.
+            base_time = allocation.borrowed_at or allocation.created_at
+            if base_time:
+                if getattr(base_time, "tzinfo", None) is not None:
+                    base_time = base_time.replace(tzinfo=None)
+                due_date = calculate_due_date(base_time).isoformat()
+
+        return {
+            "action": "status",
+            "message": "Book is currently borrowed.",
+            "book_name": book.book_name,
+            "student_name": allocation.user.name,
+            "book_status": book.status,
+            "allocation_status": allocation.status,
+            "due_date": due_date,
+        }
+
+    # Reserved or pending: show reservation info but no due date yet.
+    if allocation.status in ("RESERVED", "PENDING"):
+        return {
+            "action": "status",
+            "message": "Book is reserved and waiting for pickup."
+            if allocation.status == "RESERVED"
+            else "Book request is pending approval.",
+            "book_name": book.book_name,
+            "student_name": allocation.user.name,
+            "book_status": book.status,
+            "allocation_status": allocation.status,
+            "due_date": None,
+        }
+
+    # Fallback: should not normally happen because get_active_allocation filters statuses.
+    return {
+        "action": "status",
+        "message": f"Book status: {book.status}, allocation: {allocation.status}",
+        "book_name": book.book_name,
+        "student_name": allocation.user.name,
+        "book_status": book.status,
+        "allocation_status": allocation.status,
+        "due_date": None,
+    }

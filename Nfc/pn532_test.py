@@ -23,36 +23,57 @@ except ImportError:
     requests = None
 
 
-def send_tap(uid_hex: str) -> None:
-    if not requests:
-        print("Install 'requests' to send to backend: pip install requests")
-        return
-    try:
-        r = requests.post(
-            NFC_TAP_URL,
-            json={"nfc_tag_id": uid_hex},
-            timeout=5,
-        )
-        r.raise_for_status()
-        data = r.json()
-        action = data.get("action", "?")
-        msg = data.get("message", "")
-        book = data.get("book_name", "")
-        student = data.get("student_name", "")
-        print(f"  -> {action.upper()}: {msg} | Book: {book} | Student: {student}")
-    except requests.exceptions.RequestException as e:
-        if hasattr(e, "response") and e.response is not None:
-            try:
-                err = e.response.json()
-                detail = err.get("detail", e.response.text)
-            except Exception:
-                detail = e.response.text
-            if e.response.status_code == 404 and "Book not found" in str(detail):
-                print(f"  -> (New book?) Scan saved for Add Book. Use 'Scan NFC' in the web app to capture this UID.")
-            else:
-                print(f"  -> Error: {detail}")
-        else:
-            print(f"  -> Error: {e}")
+    def send_tap(uid_hex):
+        global current_book_title, current_submit_date, status_line, current_mode
+        global last_uid
+
+        if not requests:
+            return
+
+        try:
+            r = requests.post(NFC_TAP_URL, json={"nfc_tag_id": uid_hex}, timeout=5)
+        except requests.exceptions.RequestException:
+            status_line = "Network error"
+            current_mode = MODE_STATUS
+            last_uid = None
+            return
+
+        try:
+            data = r.json()
+        except:
+            data = {}
+
+        action = data.get("action")
+
+        # 🔥 SUCCESS CASE (issue or return)
+        if action == "issue":
+            current_book_title = data.get("book_name", "Unknown")
+            current_submit_date = format_date(data.get("due_date"))
+            status_line = "Book Issued"
+            current_mode = MODE_STATUS
+            last_uid = None
+            return
+
+        elif action == "return":
+            current_book_title = "No book issued"
+            current_submit_date = "--/--/----"
+            status_line = "Book Returned"
+            current_mode = MODE_STATUS
+            last_uid = None
+            return
+
+        # 🔥 If backend did not send action but status was 200
+        if r.status_code == 200:
+            status_line = data.get("message", "Done")[:20]
+            current_mode = MODE_STATUS
+            last_uid = None
+            return
+
+        # 🔥 Only true failure
+        status_line = data.get("detail", "Action failed")[:20]
+        current_mode = MODE_STATUS
+        last_uid = None
+
 
 
 def main():
