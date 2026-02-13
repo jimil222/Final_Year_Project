@@ -1,19 +1,52 @@
 version: "3.8"
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: mysql-local
+  # Backend API (FastAPI)
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: libra-backend
     restart: always
     ports:
-      - "3306:3306"
+      - "8000:8000"
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: testdb
-      MYSQL_USER: testuser
-      MYSQL_PASSWORD: testpass
-    volumes:
-      - mysql_data:/var/lib/mysql
+      # DATABASE_URL should be set via .env file or environment variable
+      # Example: DATABASE_URL=mysql://user:password@host:port/database
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY:-your_super_secret_key_change_this_in_production}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      MIN_RETURN_TIME_SECONDS: ${MIN_RETURN_TIME_SECONDS:-10}
+    # Uncomment the volumes section for development (hot-reload)
+    # volumes:
+    #   - ./Backend:/app
+    #   - /app/venv
+    networks:
+      - libra-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-volumes:
-  mysql_data:
+  # Frontend (React + Vite)
+  frontend:
+    build:
+      context: ./Libra_Automated_Library
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    container_name: libra-frontend
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - libra-network
+
+networks:
+  libra-network:
+    driver: bridge
