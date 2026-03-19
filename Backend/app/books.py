@@ -53,7 +53,7 @@ class CreateBookRequest(BaseModel):
     book_name: str
     author: Optional[str] = None
     nfc_tag_id: str
-    shelf_id: int
+    shelf_id: Optional[int] = None
 
 
 class ShelfResponse(BaseModel):
@@ -61,6 +61,42 @@ class ShelfResponse(BaseModel):
     shelf_number: str
     coordinate_x: int
     coordinate_y: int
+
+
+class ShelfCapacityResponse(BaseModel):
+    shelf_id: int
+    shelf_number: str
+    book_count: int
+    capacity: int
+    available: bool
+
+
+class AdminBookInventoryResponse(BaseModel):
+    book_id: int
+    book_name: str
+    author: Optional[str]
+    nfc_tag_id: str
+    shelf_id: int
+    status: str
+    allocation_id: Optional[int] = None
+    allocation_user_name: Optional[str] = None
+    allocation_user_email: Optional[str] = None
+    allocation_status: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PendingRequestResponse(BaseModel):
+    allocation_id: int
+    user_id: int
+    user_name: str
+    user_email: str
+    user_department: Optional[str] = None
+    book_id: int
+    book_name: str
+    book_author: Optional[str] = None
+    created_at: datetime
+    requested_at: Optional[datetime] = None
 
 # ==================== Helper Functions ====================
 
@@ -101,6 +137,21 @@ async def get_returned_allocation_for_book(book_id: int):
     )
 
 
+async def find_available_shelf():
+    """Find first shelf with < 5 books. Each shelf can hold max 5 books."""
+    shelves = await db.shelf.find_many(order={"shelf_id": "asc"})
+    
+    for shelf in shelves:
+        book_count = await db.book.count(where={"shelf_id": shelf.shelf_id})
+        if book_count < 5:
+            return shelf
+    
+    raise HTTPException(
+        status_code=400,
+        detail="No shelf has available capacity. Each shelf can hold max 5 books."
+    )
+
+
 # ==================== Endpoints ====================
 
 @router.get("/shelves", response_model=List[ShelfResponse])
@@ -113,9 +164,30 @@ async def list_shelves(current_user=Depends(get_current_user)):
     ]
 
 
+@router.get("/shelves/capacity", response_model=List[ShelfCapacityResponse])
+async def get_shelf_capacity(current_user=Depends(get_current_user)):
+    """Get shelf capacity info (books per shelf, max 5 each)."""
+    shelves = await db.shelf.find_many(order={"shelf_id": "asc"})
+    result = []
+    
+    for shelf in shelves:
+        book_count = await db.book.count(where={"shelf_id": shelf.shelf_id})
+        available = book_count < 5
+        
+        result.append({
+            "shelf_id": shelf.shelf_id,
+            "shelf_number": shelf.shelf_number,
+            "book_count": book_count,
+            "capacity": 5,
+            "available": available
+        })
+    
+    return result
+
+
 @router.post("/", response_model=BookResponse)
 async def create_book(body: CreateBookRequest, current_admin=Depends(get_current_admin)):
-    """Admin adds a new book. Use NFC scan (GET /nfc/last-scan) to get nfc_tag_id."""
+    """Admin adds a new book. Use NFC scan (GET /nfc/last-scan) to get nfc_tag_id. Shelf auto-assigns if not provided."""
     book_name = (body.book_name or "").strip()
     if not book_name:
         raise HTTPException(status_code=400, detail="book_name is required")
@@ -125,15 +197,25 @@ async def create_book(body: CreateBookRequest, current_admin=Depends(get_current
     existing = await db.book.find_unique(where={"nfc_tag_id": uid})
     if existing:
         raise HTTPException(status_code=400, detail=f"A book is already registered with this NFC tag: {uid}")
-    shelf = await db.shelf.find_unique(where={"shelf_id": body.shelf_id})
-    if not shelf:
-        raise HTTPException(status_code=400, detail="Invalid shelf_id")
+    
+    # Auto-select shelf if not provided
+    if body.shelf_id:
+        shelf = await db.shelf.find_unique(where={"shelf_id": body.shelf_id})
+        if not shelf:
+            raise HTTPException(status_code=400, detail="Invalid shelf_id")
+        # Check capacity if manually selected
+        book_count = await db.book.count(where={"shelf_id": body.shelf_id})
+        if book_count >= 5:
+            raise HTTPException(status_code=400, detail=f"Shelf {shelf.shelf_number} is full (5/5 books). Please select another shelf.")
+    else:
+        # Auto-select first available shelf with capacity
+        shelf = await find_available_shelf()
     book = await db.book.create(
         data={
             "book_name": book_name,
             "author": (body.author or "").strip() or None,
             "nfc_tag_id": uid,
-            "shelf_id": body.shelf_id,
+            "shelf_id": shelf.shelf_id,
             "status": "AVAILABLE",
         }
     )
@@ -190,6 +272,136 @@ async def list_books(current_user=Depends(get_current_user)):
             "updated_at": book.updated_at
         })
     
+    return result
+
+
+@router.get("/admin/inventory", response_model=List[AdminBookInventoryResponse])
+async def get_book_inventory(
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    current_admin=Depends(get_current_admin)
+):
+    """
+    Admin endpoint: Get all books with optional status and search filters.
+    """
+    where_clause = {}
+
+    if status:
+        valid_statuses = ["AVAILABLE", "RESERVED", "BORROWED", "MAINTENANCE"]
+        status_values = [s.strip().upper() for s in status.split(",") if s.strip()]
+        if not status_values:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        invalid = [s for s in status_values if s not in valid_statuses]
+        if invalid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        if len(status_values) == 1:
+            where_clause["status"] = status_values[0]
+        else:
+            where_clause["status"] = {"in": status_values}
+
+    books = await db.book.find_many(
+        where=where_clause,
+        include={
+            "allocations": {
+                "where": {"status": {"in": ["PENDING", "RESERVED", "BORROWED"]}},
+                "include": {"user": True},
+            },
+        },
+        order={"book_id": "asc"},
+        skip=skip,
+        take=limit,
+    )
+
+    result = []
+    for book in books:
+        if search:
+            search_lower = search.lower()
+            if not (
+                (book.book_name and search_lower in book.book_name.lower()) or
+                (book.author and search_lower in book.author.lower())
+            ):
+                continue
+
+        allocation_id = None
+        allocation_user_name = None
+        allocation_user_email = None
+        allocation_status = None
+
+        if book.allocations and len(book.allocations) > 0:
+            alloc = book.allocations[0]
+            allocation_id = alloc.allocation_id
+            allocation_user_name = alloc.user.name
+            allocation_user_email = alloc.user.email
+            allocation_status = alloc.status
+
+        result.append({
+            "book_id": book.book_id,
+            "book_name": book.book_name,
+            "author": book.author,
+            "nfc_tag_id": book.nfc_tag_id,
+            "shelf_id": book.shelf_id,
+            "status": book.status,
+            "allocation_id": allocation_id,
+            "allocation_user_name": allocation_user_name,
+            "allocation_user_email": allocation_user_email,
+            "allocation_status": allocation_status,
+            "created_at": book.created_at,
+            "updated_at": book.updated_at,
+        })
+
+    return result
+
+
+@router.get("/admin/pending-requests", response_model=List[PendingRequestResponse])
+async def get_pending_requests(
+    search: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    current_admin=Depends(get_current_admin)
+):
+    """
+    Admin endpoint: Get pending book requests awaiting approval.
+    """
+    allocations = await db.userbookallocation.find_many(
+        where={"status": "PENDING"},
+        include={"user": True, "book": True},
+        order={"created_at": "desc"},
+        skip=skip,
+        take=limit,
+    )
+
+    result = []
+    for alloc in allocations:
+        if search:
+            search_lower = search.lower()
+            if not (
+                (alloc.user.name and search_lower in alloc.user.name.lower()) or
+                (alloc.user.email and search_lower in alloc.user.email.lower()) or
+                (alloc.book.book_name and search_lower in alloc.book.book_name.lower())
+            ):
+                continue
+
+        result.append({
+            "allocation_id": alloc.allocation_id,
+            "user_id": alloc.user_id,
+            "user_name": alloc.user.name,
+            "user_email": alloc.user.email,
+            "user_department": getattr(alloc.user, "department", None),
+            "book_id": alloc.book_id,
+            "book_name": alloc.book.book_name,
+            "book_author": alloc.book.author,
+            "created_at": alloc.created_at,
+            "requested_at": alloc.created_at,
+        })
+
     return result
 
 @router.get("/{book_id}", response_model=BookResponse)

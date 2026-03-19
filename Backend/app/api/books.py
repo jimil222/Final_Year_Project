@@ -66,6 +66,34 @@ class ShelfResponse(BaseModel):
   coordinate_y: int
 
 
+class AdminBookInventoryResponse(BaseModel):
+  book_id: int
+  book_name: str
+  author: Optional[str]
+  nfc_tag_id: str
+  shelf_id: int
+  status: str
+  allocation_id: Optional[int] = None
+  allocation_user_name: Optional[str] = None
+  allocation_user_email: Optional[str] = None
+  allocation_status: Optional[str] = None
+  created_at: datetime
+  updated_at: datetime
+
+
+class PendingRequestResponse(BaseModel):
+  allocation_id: int
+  user_id: int
+  user_name: str
+  user_email: str
+  user_department: Optional[str] = None
+  book_id: int
+  book_name: str
+  book_author: Optional[str] = None
+  created_at: datetime
+  requested_at: Optional[datetime] = None
+
+
 # ==================== Helper Functions ====================
 
 def calculate_due_date(checkout_time: datetime, days: int = 14) -> datetime:
@@ -123,6 +151,140 @@ async def list_shelves(current_user=Depends(get_current_user)):
     }
     for s in shelves
   ]
+
+
+# ==================== ADMIN ENDPOINTS ====================
+
+@router.get("/admin/inventory", response_model=List[AdminBookInventoryResponse])
+async def get_book_inventory(
+  status: Optional[str] = None,
+  search: Optional[str] = None,
+  skip: int = 0,
+  limit: int = 100,
+  current_admin=Depends(get_current_admin)
+):
+  """
+  Admin endpoint: Get all books with advanced filtering
+  Query params:
+    - status: Filter by book status (AVAILABLE, RESERVED, BORROWED, MAINTENANCE)
+    - search: Search by book name or author
+    - skip: Pagination offset
+    - limit: Max results (default 100)
+  """
+  # Build where clause
+  where_clause = {}
+  
+  # Filter by status if provided
+  if status:
+    valid_statuses = ["AVAILABLE", "RESERVED", "BORROWED", "MAINTENANCE"]
+    if status.upper() not in valid_statuses:
+      raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+    where_clause["status"] = status.upper()
+  
+  # Get books with allocations
+  books = await db.book.find_many(
+    where=where_clause,
+    include={
+      "allocations": {
+        "where": {"status": {"in": ["PENDING", "RESERVED", "BORROWED"]}},
+        "include": {"user": True},
+      },
+    },
+    order={"book_id": "asc"},
+    skip=skip,
+    take=limit,
+  )
+  
+  result = []
+  for book in books:
+    # Filter by search term if provided
+    if search:
+      search_lower = search.lower()
+      if not (
+        (book.book_name and search_lower in book.book_name.lower()) or
+        (book.author and search_lower in book.author.lower())
+      ):
+        continue
+    
+    allocation = None
+    allocation_id = None
+    allocation_user_name = None
+    allocation_user_email = None
+    allocation_status = None
+    
+    if book.allocations and len(book.allocations) > 0:
+      alloc = book.allocations[0]
+      allocation_id = alloc.allocation_id
+      allocation_user_name = alloc.user.name
+      allocation_user_email = alloc.user.email
+      allocation_status = alloc.status
+    
+    result.append({
+      "book_id": book.book_id,
+      "book_name": book.book_name,
+      "author": book.author,
+      "nfc_tag_id": book.nfc_tag_id,
+      "shelf_id": book.shelf_id,
+      "status": book.status,
+      "allocation_id": allocation_id,
+      "allocation_user_name": allocation_user_name,
+      "allocation_user_email": allocation_user_email,
+      "allocation_status": allocation_status,
+      "created_at": book.created_at,
+      "updated_at": book.updated_at,
+    })
+  
+  return result
+
+
+@router.get("/admin/pending-requests", response_model=List[PendingRequestResponse])
+async def get_pending_requests(
+  search: Optional[str] = None,
+  skip: int = 0,
+  limit: int = 100,
+  current_admin=Depends(get_current_admin)
+):
+  """
+  Admin endpoint: Get all pending book requests awaiting approval
+  Query params:
+    - search: Search by student name, email, or book name
+    - skip: Pagination offset
+    - limit: Max results (default 100)
+  """
+  allocations = await db.userbookallocation.find_many(
+    where={"status": "PENDING"},
+    include={"user": True, "book": True},
+    order={"created_at": "desc"},
+    skip=skip,
+    take=limit,
+  )
+  
+  result = []
+  for alloc in allocations:
+    # Filter by search term if provided
+    if search:
+      search_lower = search.lower()
+      if not (
+        (alloc.user.name and search_lower in alloc.user.name.lower()) or
+        (alloc.user.email and search_lower in alloc.user.email.lower()) or
+        (alloc.book.book_name and search_lower in alloc.book.book_name.lower())
+      ):
+        continue
+    
+    result.append({
+      "allocation_id": alloc.allocation_id,
+      "user_id": alloc.user_id,
+      "user_name": alloc.user.name,
+      "user_email": alloc.user.email,
+      "user_department": getattr(alloc.user, "department", None),
+      "book_id": alloc.book_id,
+      "book_name": alloc.book.book_name,
+      "book_author": alloc.book.author,
+      "created_at": alloc.created_at,
+      "requested_at": alloc.created_at,
+    })
+  
+  return result
 
 
 @router.post("/", response_model=BookResponse)
