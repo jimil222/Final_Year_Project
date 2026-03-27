@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import logo from '../assets/logo.svg';
+import BrandLogo from './BrandLogo';
 
 const Navbar = () => {
   const { user, logout, isAdmin, isStudent } = useAuth();
@@ -17,7 +17,7 @@ const Navbar = () => {
         <div className="flex justify-between items-center h-16 sm:h-20">
           <div className="flex items-center space-x-3 sm:space-x-4 lg:space-x-8">
             <Link to="/" className="flex items-center space-x-2 sm:space-x-3">
-              <img src={logo} alt="Libra Logo" className="h-14 sm:h-20" />
+              <BrandLogo iconClassName="text-xl sm:text-2xl" textClassName="text-2xl sm:text-3xl" />
             </Link>
           </div>
 

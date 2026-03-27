@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useNotification } from '../hooks/useNotifications';
-import logo from '../assets/logo.svg';
+import BrandLogo from '../components/BrandLogo';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -59,7 +59,9 @@ const Login = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4 sm:p-6">
       <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl p-6 sm:p-8 lg:p-10 w-full max-w-md border border-gray-100">
         <div className="text-center mb-8">
-          <img src={logo} alt="Libra Logo" className="h-32 mx-auto mb-6" />
+          <div className="flex justify-center mb-6">
+            <BrandLogo iconClassName="text-3xl" textClassName="text-4xl" />
+          </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
           <p className="text-gray-600 text-xs sm:text-sm">Sign in to access your library account</p>
         </div>
