@@ -1,13 +1,16 @@
 import os
 import math
+import logging
 from fastapi import APIRouter, HTTPException, Depends, status
 from app.db import db
 from app.dependencies import get_current_student, get_current_admin, get_current_user
+from app.email_service import send_book_approval_email
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/books", tags=["Books"])
+logger = logging.getLogger(__name__)
 
 # Minimum seconds after borrow before return is allowed (prevents accidental double-tap).
 MIN_RETURN_TIME_SECONDS = int(os.getenv("MIN_RETURN_TIME_SECONDS", "5"))
@@ -100,8 +103,8 @@ class PendingRequestResponse(BaseModel):
 
 # ==================== Helper Functions ====================
 
-def calculate_due_date(checkout_time: datetime, days: int = 14) -> datetime:
-    """Calculate due date (default 14 days from checkout)"""
+def calculate_due_date(checkout_time: datetime, days: int = 6) -> datetime:
+    """Calculate due date (default 6 days from checkout)"""
     return checkout_time + timedelta(days=days)
 
 async def get_book_by_id(book_id: int):
@@ -113,7 +116,10 @@ async def get_book_by_id(book_id: int):
 
 async def get_book_by_nfc(nfc_tag_id: str):
     """Get book by NFC tag or raise 404"""
-    book = await db.book.find_unique(where={"nfc_tag_id": nfc_tag_id})
+    uid = (nfc_tag_id or "").strip().upper().replace(" ", "")
+    if not uid:
+        raise HTTPException(status_code=400, detail="nfc_tag_id is required")
+    book = await db.book.find_unique(where={"nfc_tag_id": uid})
     if not book:
         raise HTTPException(status_code=404, detail="Book not found with this NFC tag")
     return book
@@ -403,6 +409,24 @@ async def get_pending_requests(
         })
 
     return result
+
+
+@router.get("/nfc/{nfc_tag_id}")
+async def get_book_by_nfc_tag(nfc_tag_id: str, current_user=Depends(get_current_user)):
+    """Get a book by NFC UID for scan inventory and NFC workflows."""
+    book = await get_book_by_nfc(nfc_tag_id)
+    return {
+        "id": book.book_id,
+        "book_id": book.book_id,
+        "title": book.book_name,
+        "book_name": book.book_name,
+        "author": book.author,
+        "status": (book.status or "").lower(),
+        "shelf_number": book.shelf_id,
+        "nfc_tag_id": book.nfc_tag_id,
+        "created_at": book.created_at,
+        "updated_at": book.updated_at,
+    }
 
 @router.get("/{book_id}", response_model=BookResponse)
 async def get_book(book_id: int, current_user=Depends(get_current_user)):
@@ -694,12 +718,15 @@ async def approve_request(book_id: int, current_admin=Depends(get_current_admin)
         )
     
     # Update allocation: PENDING → RESERVED
+    issue_time = datetime.now()
+    return_time = calculate_due_date(issue_time)
+
     await db.userbookallocation.update(
         where={"allocation_id": allocation.allocation_id},
         data={
             "status": "RESERVED",
             "admin_id": current_admin.admin_id,
-            "reserved_at": datetime.now()
+            "reserved_at": issue_time
         }
     )
     
@@ -708,11 +735,26 @@ async def approve_request(book_id: int, current_admin=Depends(get_current_admin)
         where={"book_id": book_id},
         data={"status": "RESERVED"}
     )
+
+    try:
+        await send_book_approval_email(
+            to_email=allocation.user.email,
+            user_name=allocation.user.name,
+            book_name=book.book_name,
+            author=book.author,
+            issue_datetime=issue_time,
+            return_datetime=return_time,
+        )
+    except Exception as exc:
+        # Email failure should not fail approval.
+        logger.warning("Failed to send approval email for book_id=%s: %s", book_id, exc)
     
     return {
         "message": "Request approved successfully",
         "book_name": book.book_name,
         "allocated_to": allocation.user.email,
+        "issue_date_time": issue_time,
+        "return_due_date_time": return_time,
         "approved_by": current_admin.email
     }
 

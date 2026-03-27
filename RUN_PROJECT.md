@@ -15,6 +15,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - API: http://localhost:8000  
 - Docs: http://localhost:8000/docs  
 - Ensure `.env` has valid `DATABASE_URL` and `SECRET_KEY`.
+- Email setup (FastAPI-Mail SMTP): set `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `MAIL_SERVER`, `MAIL_PORT`, and optional `MAIL_FROM_NAME`, `MAIL_STARTTLS`, `MAIL_SSL_TLS`, `MAIL_VALIDATE_CERTS`.
 
 ## 2. Frontend (Vite + React)
 

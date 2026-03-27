@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import asyncio
 from app.db import db, connect_db, disconnect_db
 from app.auth import router as auth_router
+from app.email_service import run_due_reminder_loop
 from app.dependencies import get_current_user
 from pydantic import BaseModel
 from typing import Optional
@@ -16,7 +18,13 @@ class UserCreate(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_db()
+    reminder_task = asyncio.create_task(run_due_reminder_loop())
     yield
+    reminder_task.cancel()
+    try:
+        await reminder_task
+    except asyncio.CancelledError:
+        pass
     await disconnect_db()
 
 app = FastAPI(lifespan=lifespan)
