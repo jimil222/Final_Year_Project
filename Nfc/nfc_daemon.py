@@ -3,8 +3,9 @@ Unified NFC daemon:
 - Always-on PN532 NFC reader.
 - Talks to backend /nfc/tap to issue/return books.
 - Drives an SH1106 OLED and TWO buttons:
-    - GPIO17 → RETURN mode (20s)
-    - GPIO27 → INFO mode (10s)
+    - GPIO27 → RETURN mode (20s)
+    - GPIO17 → INFO mode (10s)
+Both buttons wired to 3.3V, using PUD_DOWN.
 """
 
 import os
@@ -31,8 +32,8 @@ except ImportError:
 # CONFIG
 # ==============================
 
-BUTTON_RETURN = 17
-BUTTON_INFO = 27
+BUTTON_RETURN = 27
+BUTTON_INFO = 17
 
 RETURN_MODE_TIMEOUT = 20
 INFO_MODE_TIMEOUT = 10
@@ -79,8 +80,8 @@ device = sh1106(serial)
 # ==============================
 
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(BUTTON_RETURN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.setup(BUTTON_INFO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.setup(BUTTON_RETURN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+GPIO.setup(BUTTON_INFO, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
 
 # ==============================
@@ -254,20 +255,20 @@ def main():
         while True:
 
             # BUTTONS
-            if GPIO.input(BUTTON_RETURN) == GPIO.LOW:
+            if GPIO.input(BUTTON_RETURN) == GPIO.HIGH:
                 time.sleep(0.05)
-                if GPIO.input(BUTTON_RETURN) == GPIO.LOW:
+                if GPIO.input(BUTTON_RETURN) == GPIO.HIGH:
                     current_mode = MODE_RETURN
                     mode_start_time = time.time()
-                    while GPIO.input(BUTTON_RETURN) == GPIO.LOW:
+                    while GPIO.input(BUTTON_RETURN) == GPIO.HIGH:
                         time.sleep(0.01)
 
-            if GPIO.input(BUTTON_INFO) == GPIO.LOW:
+            if GPIO.input(BUTTON_INFO) == GPIO.HIGH:
                 time.sleep(0.05)
-                if GPIO.input(BUTTON_INFO) == GPIO.LOW:
+                if GPIO.input(BUTTON_INFO) == GPIO.HIGH:
                     current_mode = MODE_INFO
                     mode_start_time = time.time()
-                    while GPIO.input(BUTTON_INFO) == GPIO.LOW:
+                    while GPIO.input(BUTTON_INFO) == GPIO.HIGH:
                         time.sleep(0.01)
 
             # NFC
