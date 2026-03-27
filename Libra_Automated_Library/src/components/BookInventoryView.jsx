@@ -117,7 +117,7 @@ const BookInventoryView = () => {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Book Inventory</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Book Inventory</h2>
         <p className="text-gray-600">View and manage all books in the library</p>
       </div>
 
@@ -140,7 +140,7 @@ const BookInventoryView = () => {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none text-sm bg-white"
+            className="w-full md:w-auto px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none text-sm bg-white"
           >
             <option value="AVAILABLE,RESERVED">Available + Reserved</option>
             <option value="">All Status</option>
@@ -172,7 +172,7 @@ const BookInventoryView = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {filteredBooks.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="min-w-[760px] w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold text-gray-900">Book Name</th>

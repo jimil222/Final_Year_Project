@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useNotification } from '../hooks/useNotifications';
 import BrandLogo from '../components/BrandLogo';
+import sideImage from '../assets/side_image.png';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -56,100 +57,120 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4 sm:p-6">
-      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl p-6 sm:p-8 lg:p-10 w-full max-w-md border border-gray-100">
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-6">
-            <BrandLogo iconClassName="text-3xl" textClassName="text-4xl" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-3 sm:p-6 flex items-center justify-center">
+      <div className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+        <div className="grid lg:grid-cols-2">
+          <div className="relative hidden lg:block min-h-[680px]">
+            <img src={sideImage} alt="Library" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-900/60 to-indigo-900/35" />
+            <div className="absolute bottom-10 left-10 right-10 text-white">
+              <h2 className="text-3xl font-bold mb-3">Welcome to Libra</h2>
+              <p className="text-blue-100">Sign in and continue your library journey with smart recommendations and faster access.</p>
+            </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-          <p className="text-gray-600 text-xs sm:text-sm">Sign in to access your library account</p>
+
+          <div className="p-5 sm:p-8 lg:p-10 flex items-center">
+            <div className="w-full max-w-md mx-auto">
+              <div className="lg:hidden mb-6 rounded-xl overflow-hidden relative h-40 sm:h-48">
+                <img src={sideImage} alt="Library" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-900/55 to-indigo-900/30" />
+              </div>
+
+              <div className="text-center mb-8">
+                <div className="flex justify-center mb-6">
+                  <BrandLogo iconClassName="text-3xl" textClassName="text-4xl" />
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
+                <p className="text-gray-600 text-xs sm:text-sm">Sign in to access your library account</p>
+              </div>
+
+              <div className="flex space-x-2 mb-6 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setRole('student')}
+                  type="button"
+                  className={`flex-1 py-2.5 rounded-md font-semibold text-sm transition-all duration-200 ${role === 'student'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                >
+                  Student
+                </button>
+                <button
+                  onClick={() => setRole('admin')}
+                  type="button"
+                  className={`flex-1 py-2.5 rounded-md font-semibold text-sm transition-all duration-200 ${role === 'admin'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                >
+                  Admin
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <label className="block text-gray-700 text-sm font-semibold mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="input-modern"
+                    placeholder="you@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 text-sm font-semibold mb-2">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="input-modern"
+                    placeholder="Enter your password"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary w-full text-base"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Signing in...
+                    </span>
+                  ) : (
+                    'Sign In'
+                  )}
+                </button>
+              </form>
+
+              <p className="mt-6 text-center text-gray-600 text-sm">
+                Don't have an account?{' '}
+                <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
+                  Create account
+                </Link>
+              </p>
+
+              <button
+                onClick={handleClearStorage}
+                className="mt-4 w-full py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-semibold transition-colors"
+              >
+                Clear Storage
+              </button>
+            </div>
+          </div>
         </div>
-
-        <div className="flex space-x-2 mb-6 bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => setRole('student')}
-            type="button"
-            className={`flex-1 py-2.5 rounded-md font-semibold text-sm transition-all duration-200 ${role === 'student'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            Student
-          </button>
-          <button
-            onClick={() => setRole('admin')}
-            type="button"
-            className={`flex-1 py-2.5 rounded-md font-semibold text-sm transition-all duration-200 ${role === 'admin'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            Admin
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-gray-700 text-sm font-semibold mb-2">
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="input-modern"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-semibold mb-2">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="input-modern"
-              placeholder="Enter your password"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full text-base"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Signing in...
-              </span>
-            ) : (
-              'Sign In'
-            )}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-gray-600 text-sm">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
-            Create account
-          </Link>
-        </p>
-
-        <button
-          onClick={handleClearStorage}
-          className="mt-4 w-full py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-semibold transition-colors"
-        >
-          Clear Storage
-        </button>
       </div>
     </div>
   );

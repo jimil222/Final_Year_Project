@@ -109,9 +109,11 @@ const StudentDashboard = () => {
   const myRequests = requests.filter(
     req => String(req.user_id) === String(user?.id)
   );
+  const availableBooksCount = books.filter((book) => book.status === 'available').length;
+  const totalRequestsCount = myRequests.length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <RecommendationModal
         isOpen={showRecModal}
         onClose={() => setShowRecModal(false)}
@@ -124,31 +126,31 @@ const StudentDashboard = () => {
         style={{ backgroundImage: `url(${libraryImage})` }}
       >
         <div className="absolute inset-0 bg-gradient-to-r from-blue-900/70 via-blue-900/30 to-white/0"></div>
-        <div className="relative z-10 px-6 py-8 md:px-10 md:py-10">
-          <p className="text-sm uppercase tracking-widest text-blue-200 font-semibold mb-2">Featured Collection</p>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3">Modernism in Architecture</h1>
-          <p className="max-w-2xl text-sm md:text-base text-blue-100 mb-6">Explore over 450 new journals and high-resolution blueprints added this week.</p>
+        <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+          <p className="text-sm uppercase tracking-widest text-blue-200 font-semibold mb-2">Smart Library Dashboard</p>
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3">Discover, Request, and Track Books</h1>
+          <p className="max-w-2xl text-sm md:text-base text-blue-100 mb-6">Search the catalog, place book requests, and monitor borrow/return activity from one place.</p>
           <div className="flex flex-wrap items-center gap-4 md:gap-6">
             <button className="bg-white text-blue-700 font-semibold px-5 py-2.5 rounded-lg shadow-sm hover:shadow-md border border-transparent transition-all">
-              Browse Collection
+              Browse Library
             </button>
             <div className="inline-flex items-center gap-4">
               <div className="bg-white/20 text-white px-4 py-2 rounded-lg">
-                <p className="text-xs uppercase tracking-wider leading-tight">Active loans</p>
-                <p className="text-xl font-bold">12</p>
+                <p className="text-xs uppercase tracking-wider leading-tight">Available books</p>
+                <p className="text-xl font-bold">{availableBooksCount}</p>
               </div>
               <div className="bg-white/20 text-white px-4 py-2 rounded-lg">
-                <p className="text-xs uppercase tracking-wider leading-tight">Notifications</p>
-                <p className="text-xl font-bold">3</p>
+                <p className="text-xs uppercase tracking-wider leading-tight">My total requests</p>
+                <p className="text-xl font-bold">{totalRequestsCount}</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user?.name || 'Student'}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Welcome back, {user?.name || 'Student'}</h1>
           <p className="text-gray-600">Continue your research or explore library discoveries.</p>
         </div>
       </div>
@@ -161,7 +163,7 @@ const StudentDashboard = () => {
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
 
           {recommendations?.books?.length > 0 && (
-            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50 p-8 rounded-2xl border border-blue-200 shadow-lg relative overflow-hidden">
+            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50 p-4 sm:p-8 rounded-2xl border border-blue-200 shadow-lg relative overflow-hidden">
               {/* Background pattern */}
               <div className="absolute inset-0 opacity-5">
                 <div className="absolute top-4 right-4 w-32 h-32 bg-blue-400 rounded-full blur-3xl"></div>
@@ -170,28 +172,28 @@ const StudentDashboard = () => {
 
               <div className="relative z-10">
                 <div className="text-center mb-8">
-                  <h2 className="text-3xl font-bold mb-2 flex items-center justify-center text-blue-900">
-                    <Star className="mr-3 text-blue-600 w-8 h-8 fill-current animate-pulse" />
+                  <h2 className="text-xl sm:text-3xl font-bold mb-2 flex items-center justify-center text-blue-900">
+                    <Star className="mr-2 sm:mr-3 text-blue-600 w-6 h-6 sm:w-8 sm:h-8 fill-current animate-pulse" />
                     Recommended for You
                   </h2>
-                  <p className="text-blue-700 text-lg">Personalized picks based on your interests</p>
+                  <p className="text-blue-700 text-sm sm:text-lg">Personalized picks based on your interests</p>
                 </div>
 
                 {/* Recommendations Table */}
                 <div className="bg-white rounded-xl shadow-sm border border-blue-100 overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
+                  <table className="min-w-[680px] w-full divide-y divide-gray-200">
                     <thead className="bg-gradient-to-r from-blue-50 to-indigo-50">
                       <tr>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-blue-900 uppercase tracking-wider">
+                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-900 uppercase tracking-wider">
                           Book Title
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-blue-900 uppercase tracking-wider">
+                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-900 uppercase tracking-wider">
                           Author
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-blue-900 uppercase tracking-wider">
+                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-900 uppercase tracking-wider">
                           Book ID
                         </th>
-                        <th className="px-6 py-4 text-center text-xs font-semibold text-blue-900 uppercase tracking-wider">
+                        <th className="px-3 sm:px-6 py-4 text-center text-xs font-semibold text-blue-900 uppercase tracking-wider">
                           Recommendation
                         </th>
                       </tr>
@@ -199,7 +201,7 @@ const StudentDashboard = () => {
                     <tbody className="bg-white divide-y divide-gray-100">
                       {recommendations.books.map((book, index) => (
                         <tr key={book.id} className={`hover:bg-blue-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-blue-25'}`}>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
                               <div className="bg-blue-100 p-2 rounded-lg mr-3">
                                 <BookOpen className="text-blue-600 w-5 h-5" />
@@ -209,13 +211,13 @@ const StudentDashboard = () => {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {book.author}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
                             {book.book_id}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center">
                             <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
                               <Star className="w-4 h-4 fill-current" />
                               AI Recommended
@@ -240,8 +242,8 @@ const StudentDashboard = () => {
             </div>
           )}
 
-          <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-            <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-800">
+          <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-100 shadow-sm">
+            <h2 className="text-xl sm:text-2xl font-bold mb-6 flex items-center text-gray-800">
               <Book className="mr-2 text-green-600 w-6 h-6" />
               Available Books
             </h2>
@@ -252,26 +254,26 @@ const StudentDashboard = () => {
               </div>
             ) : (
               <div className="overflow-x-auto bg-white rounded-xl shadow-sm border border-gray-100">
-                <table className="min-w-full">
+                <table className="min-w-[700px] w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Book Title</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Author</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Genre</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Inventory ID</th>
-                      <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Book Title</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Author</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Genre</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Inventory ID</th>
+                      <th className="px-3 sm:px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {filteredBooks.map(book => (
                       <tr key={book.id} className="hover:bg-blue-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{book.title}</div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{book.author}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{book.genre || 'N/A'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">{book.book_id}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">{book.author}</td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">{book.genre || 'N/A'}</td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">{book.book_id}</td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-center">
                           <button
                             onClick={() => handleRequest(book.id, book.title, book.department)}
                             disabled={actionLoading || book.status !== 'available'}
@@ -298,8 +300,8 @@ const StudentDashboard = () => {
            HISTORY TAB
          ============================== */}
       {activeTab === 'history' && (
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm animate-fadeIn">
-          <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-800">
+        <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-100 shadow-sm animate-fadeIn">
+          <h2 className="text-xl sm:text-2xl font-bold mb-6 flex items-center text-gray-800">
             <ClipboardList className="mr-2 text-purple-600 w-6 h-6" />
             Request History
           </h2>

@@ -40,7 +40,7 @@ const Sidebar = () => {
       {/* Mobile Menu Button */}
       <button
         onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="lg:hidden fixed top-[3.75rem] sm:top-20 left-4 z-40 p-2 bg-white rounded-lg shadow-md border border-gray-200 hover:bg-gray-50 transition-colors"
+        className="lg:hidden fixed top-16 sm:top-20 left-3 sm:left-4 z-40 p-2 bg-white rounded-lg shadow-md border border-gray-200 hover:bg-gray-50 transition-colors"
         aria-label="Toggle menu"
       >
         {isMobileOpen ? <X className="w-5 h-5 text-gray-700" /> : <Menu className="w-5 h-5 text-gray-700" />}
@@ -56,7 +56,7 @@ const Sidebar = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-14 sm:top-16 left-0 z-30 w-64 bg-white border-r border-gray-200 min-h-screen lg:min-h-[calc(100vh-4rem)] p-4 transform transition-transform duration-300 ease-in-out ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        className={`fixed lg:fixed top-16 sm:top-20 left-0 z-30 w-[85vw] max-w-xs sm:w-72 lg:w-64 bg-white border-r border-gray-200 h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] overflow-y-auto p-4 transform transition-transform duration-300 ease-in-out ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
           }`}
       >
         <nav className="space-y-1">

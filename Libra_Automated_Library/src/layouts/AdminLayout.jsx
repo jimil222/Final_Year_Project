@@ -7,7 +7,7 @@ const AdminLayout = ({ children }) => {
       <Navbar />
       <div className="flex relative">
         <Sidebar />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full lg:ml-0">
+        <main className="flex-1 w-full p-3 sm:p-4 md:p-6 lg:p-8 lg:ml-64">
           {children}
         </main>
       </div>

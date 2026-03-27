@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useNotification } from '../hooks/useNotifications';
+import BrandLogo from '../components/BrandLogo';
+import sideImage from '../assets/side_image.png';
 
 const DEPARTMENTS = [
   'Computer Science',
@@ -71,24 +73,40 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl p-4 sm:p-5 w-full max-w-md border border-gray-100">
-
-        {/* Header */}
-        <div className="text-center mb-4">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center mx-auto mb-2 shadow-md">
-            <span className="text-2xl font-bold text-white">L</span>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-3 sm:p-6 flex items-center justify-center">
+      <div className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+        <div className="grid lg:grid-cols-2">
+          <div className="relative hidden lg:block min-h-[760px]">
+            <img src={sideImage} alt="Library" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-900/60 to-indigo-900/35" />
+            <div className="absolute bottom-10 left-10 right-10 text-white">
+              <h2 className="text-3xl font-bold mb-3">Create Your Libra Account</h2>
+              <p className="text-blue-100">Register once and unlock smart recommendations, request tracking, and seamless borrowing.</p>
+            </div>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">
-            Join the Library
-          </h1>
-          <p className="text-gray-600 text-xs">
-            Create your account to access resources
-          </p>
-        </div>
 
-        {/* Role Switcher */}
-        <div className="flex space-x-1 mb-4 bg-gray-100 rounded-lg p-1">
+          <div className="p-4 sm:p-6 lg:p-8 flex items-center">
+            <div className="w-full max-w-md mx-auto">
+              <div className="lg:hidden mb-5 rounded-xl overflow-hidden relative h-36 sm:h-44">
+                <img src={sideImage} alt="Library" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-900/55 to-indigo-900/30" />
+              </div>
+
+              {/* Header */}
+              <div className="text-center mb-4">
+                <div className="flex justify-center mb-2">
+                  <BrandLogo iconClassName="text-2xl" textClassName="text-3xl" />
+                </div>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">
+                  Join the Library
+                </h1>
+                <p className="text-gray-600 text-xs">
+                  Create your account to access resources
+                </p>
+              </div>
+
+              {/* Role Switcher */}
+              <div className="flex space-x-1 mb-4 bg-gray-100 rounded-lg p-1">
           <button
             onClick={() => handleRoleChange('student')}
             type="button"
@@ -111,9 +129,9 @@ const Register = () => {
           >
             Admin
           </button>
-        </div>
+              </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+              <form onSubmit={handleSubmit} className="space-y-3">
 
           {/* Full Name */}
           <div>
@@ -253,15 +271,18 @@ const Register = () => {
               'Register'
             )}
           </button>
-        </form>
+              </form>
 
-        {/* Footer */}
-        <p className="mt-4 text-center text-gray-600 text-sm">
-          Already have an account?{' '}
-          <Link to="/login" className="text-blue-600 hover:text-blue-700 font-semibold">
-            Sign In
-          </Link>
-        </p>
+              {/* Footer */}
+              <p className="mt-4 text-center text-gray-600 text-sm">
+                Already have an account?{' '}
+                <Link to="/login" className="text-blue-600 hover:text-blue-700 font-semibold">
+                  Sign In
+                </Link>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
